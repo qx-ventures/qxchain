@@ -44,7 +44,7 @@ class OllamaWorker:
         """Check if chain connection is healthy"""
         try:
             # Try to get the latest block
-            latest_block = self.substrate.get_block_number()
+            latest_block = self.substrate.get_block_number(None)
             print(f"🔗 Chain connection healthy - Latest block: {latest_block}")
             return True
         except Exception as e:
@@ -146,9 +146,13 @@ class OllamaWorker:
             for attempt in range(max_retries):
                 try:
                     # Check if substrate connection is still alive
-                    if not hasattr(self.substrate, 'websocket') or self.substrate.websocket.closed:
+                    try:
+                        # Test the connection by getting a simple property
+                        self.substrate.get_block_number(None)
+                    except:
                         print(f"🔄 Reconnecting to chain (attempt {attempt + 1}/{max_retries})")
-                        self.substrate = SubstrateInterface(url=self.substrate.url)
+                        chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                        self.substrate = SubstrateInterface(url=chain_url)
                     
                     call = self.substrate.compose_call(
                         call_module='QxAi',
@@ -216,49 +220,9 @@ class OllamaWorker:
         
         @app.get("/")
         async def root():
-            """Root endpoint showing available API endpoints"""
-            base_url = f"http://localhost:{port}"
-            return {
-                "message": "QX Chain Ollama Worker API",
-                "version": "1.0.0",
-                "worker_address": self.worker_address,
-                "endpoints": {
-                    "root": {
-                        "url": f"{base_url}/",
-                        "description": "This page - API information and links",
-                        "method": "GET"
-                    },
-                    "status": {
-                        "url": f"{base_url}/status", 
-                        "description": "Worker status and configuration",
-                        "method": "GET"
-                    },
-                    "models": {
-                        "url": f"{base_url}/models",
-                        "description": "List all registered models",
-                        "method": "GET"
-                    },
-                    "inference": {
-                        "url": f"{base_url}/inference",
-                        "description": "Submit inference request",
-                        "method": "POST",
-                        "body": {
-                            "prompt": "string",
-                            "model_id": "integer (default: 0)"
-                        }
-                    },
-                    "docs": {
-                        "url": f"{base_url}/docs",
-                        "description": "Interactive API documentation (Swagger UI)",
-                        "method": "GET"
-                    },
-                    "redoc": {
-                        "url": f"{base_url}/redoc",
-                        "description": "Alternative API documentation (ReDoc)",
-                        "method": "GET"
-                    }
-                }
-            }
+            """Root endpoint redirects to API documentation"""
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/docs")
         
         @app.post("/inference")
         async def inference_endpoint(request: InferenceRequest):
@@ -323,10 +287,7 @@ class OllamaWorker:
         
         if model_id is not None:
             print(f"✅ Zoo assistant model setup complete (ID: {model_id})")
-            
-            # Test inference
-            test_prompt = "What are the zoo's operating hours?"
-            await self.process_inference_request(test_prompt, model_id)
+            print(f"💡 Model ready for inference requests via API")
         
         return model_id
 

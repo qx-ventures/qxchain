@@ -108,15 +108,24 @@ fi
 
 # Find available port for this worker
 WORKER_PORT=$(find_available_port $WORKER_BASE_PORT)
-echo -e "${BLUE}📋 Using port $WORKER_PORT for worker${NC}"
+if [ $WORKER_PORT -eq $WORKER_BASE_PORT ]; then
+    echo -e "${GREEN}✅ Using default worker port $WORKER_PORT${NC}"
+else
+    echo -e "${YELLOW}⚠️ Default worker port $WORKER_BASE_PORT is in use${NC}"
+    echo -e "${GREEN}✅ Using available port $WORKER_PORT instead${NC}"
+fi
 
 # Generate unique worker ID
 WORKER_ID="worker_$(date +%s)_$$"
 LOG_FILE="$LOG_DIR/${WORKER_ID}.log"
 
-echo -e "${BLUE}🤖 Starting Ollama Worker on port $WORKER_PORT...${NC}"
+echo -e "${BLUE}🤖 Starting Ollama Worker...${NC}"
+echo -e "${BLUE}📋 Worker ID: $WORKER_ID${NC}"
+echo -e "${BLUE}📋 API Server port: $WORKER_PORT${NC}"
 echo -e "${YELLOW}💡 Worker will run in foreground. Press Ctrl+C to stop.${NC}"
 echo -e "${YELLOW}📄 Logs will be shown in terminal and also saved to: $LOG_FILE${NC}"
+echo -e "${GREEN}🌐 API Documentation available at: http://localhost:$WORKER_PORT/docs${NC}"
+echo -e "${GREEN}🔍 Worker Status available at: http://localhost:$WORKER_PORT/status${NC}"
 echo ""
 
 cd "$SCRIPT_DIR"
