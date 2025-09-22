@@ -1,13 +1,12 @@
 <div align="center">
 
-# Polkadot SDK's Minimal Template
+# QX Chain
 
 <img height="70px" alt="Polkadot SDK Logo" src="https://github.com/paritytech/polkadot-sdk/raw/master/docs/images/Polkadot_Logo_Horizontal_Pink_White.png#gh-dark-mode-only"/>
-<img height="70px" alt="Polkadot SDK Logo" src="https://github.com/paritytech/polkadot-sdk/raw/master/docs/images/Polkadot_Logo_Horizontal_Pink_Black.png#gh-light-mode-only"/>
 
-> This is a minimal template for creating a blockchain based on Polkadot SDK.
+> QX Chain - A blockchain for optimistic machine learning based on Polkadot SDK.
 >
-> This template is automatically updated after releases in the main [Polkadot SDK monorepo](https://github.com/paritytech/polkadot-sdk).
+> Built with Polkadot SDK for decentralized AI inference and validation.
 
 </div>
 
@@ -19,7 +18,9 @@
 
 - [Getting Started](#getting-started)
 
-- [Starting a Minimal Template Chain](#starting-a-minimal-template-chain)
+- [QX Chain Quick Start](#qx-chain-quick-start)
+
+- [Starting QX Chain](#starting-qx-chain)
 
   - [Omni Node](#omni-node)
   - [QX Chain Node](#qx-chain-node)
@@ -34,18 +35,17 @@
 
 ## Intro
 
-- 🤏 This template is a minimal (in terms of complexity and the number of components)
-template for building a blockchain node.
+- 🧠 QX Chain is an optimistic machine learning blockchain for decentralized AI inference.
 
-- 🔧 Its runtime is configured with a single custom pallet as a starting point, and a handful of ready-made pallets
+- 🔧 Its runtime is configured with custom pallets for ML workloads and standard pallets
 such as a [Balances pallet](https://paritytech.github.io/polkadot-sdk/master/pallet_balances/index.html).
 
-- 👤 The template has no consensus configured - it is best for experimenting with a single node network.
+- 🤖 QX Chain supports AI model inference through workers and validators in a decentralized network.
 
 
-## Template Structure
+## QX Chain Structure
 
-A Polkadot SDK based project such as this one consists of:
+QX Chain is a Polkadot SDK based project that consists of:
 
 - 🧮 the [Runtime](./runtime/README.md) - the core logic of the blockchain.
 - 🎨 the [Pallets](./pallets/README.md) - from which the runtime is constructed.
@@ -62,30 +62,63 @@ compiled unless building the entire workspace).
 - 🛠️ Depending on your operating system and Rust version, there might be additional
 packages required to compile this template - please take note of the Rust compiler output.
 
-Fetch minimal template code.
+Fetch QX Chain code.
 
 ```sh
-git clone https://github.com/paritytech/polkadot-sdk-minimal-template.git minimal-template
+git clone <qx-chain-repository-url> qxchain
 
-cd minimal-template
+cd qxchain
 ```
 
-## Starting a Minimal Template Chain
+## QX Chain Quick Start
+
+### Using QX Chain Scripts (Recommended)
+
+For a complete QX Chain opML environment setup:
+
+```bash
+# Complete setup (one time)
+./scripts/setup_qx_chain.sh
+
+# Run services in separate terminals:
+# Terminal 1
+./scripts/start_chain.sh
+
+# Terminal 2  
+./scripts/start_worker.sh
+
+# Terminal 3
+./scripts/start_validator.sh
+```
+
+**Service Information:**
+- **QX Chain**: `ws://localhost:9944`
+- **Ollama API**: `http://localhost:11434`  
+- **Worker API**: `http://localhost:8000`
+
+**Test the setup:**
+```bash
+./scripts/test_inference.py
+```
+
+See [scripts/README.md](./scripts/README.md) for detailed script documentation.
+
+## Starting QX Chain
 
 ### Omni Node
 
 [Omni Node](https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/omni_node/index.html) can
-be used to run the minimal template's runtime. `polkadot-omni-node` binary crate usage is described at a high-level
+be used to run the QX Chain runtime. `polkadot-omni-node` binary crate usage is described at a high-level
 [on crates.io](https://crates.io/crates/polkadot-omni-node).
 
 #### Install `polkadot-omni-node`
 
 Please see installation section on [crates.io/omni-node](https://crates.io/crates/polkadot-omni-node).
 
-#### Build `minimal-template-runtime`
+#### Build `qxchain-runtime`
 
 ```sh
-cargo build -p minimal-template-runtime --release
+cargo build -p qxchain-runtime --release
 ```
 
 #### Install `staging-chain-spec-builder`
@@ -96,24 +129,24 @@ Please see the installation section at [`crates.io/staging-chain-spec-builder`](
 
 ```sh
 chain-spec-builder create --relay-chain "dev" --para-id 1000 --runtime \
-    target/release/wbuild/minimal-template-runtime/minimal_template_runtime.wasm named-preset development
+    target/release/wbuild/qxchain-runtime/qxchain_runtime.wasm named-preset development
 ```
 
 **Note**: the `relay-chain` and `para-id` flags are extra bits of information required to
 configure the node for the case of representing a parachain that is connected to a relay chain.
-They are not relevant to minimal template business logic, but they are mandatory information for
+They are not relevant to QX Chain business logic, but they are mandatory information for
 Omni Node, nonetheless.
 
 #### Run Omni Node
 
 Start Omni Node in development mode (sets up block production and finalization based on manual seal,
-sealing a new block every 3 seconds), with a minimal template runtime chain spec.
+sealing a new block every 3 seconds), with a QX Chain runtime chain spec.
 
 ```sh
 polkadot-omni-node --chain <path/to/chain_spec.json> --dev
 ```
 
-### Minimal Template Node
+### QX Chain Node
 
 #### Build both node & runtime
 
@@ -125,20 +158,20 @@ cargo build --workspace --release
 and has as entry point the node binary:
 
 ```sh
-docker build . -t polkadot-sdk-minimal-template
+docker build . -t qxchain
 ```
 
 #### Start the `qxchain`
 
 The `qxchain` has dependency on the `qxchain-runtime`. It will use
-the `minimal_template_runtime::WASM_BINARY` constant (which holds the WASM blob as a byte
+the `qxchain_runtime::WASM_BINARY` constant (which holds the WASM blob as a byte
 array) for chain spec building, while starting. This is in contrast to Omni Node which doesn't
 depend on a specific runtime, but asks for the chain spec at startup.
 
 ```sh
-<target/release/path/to/qxchain> --tmp --consensus manual-seal-3000
+target/release/qxchain --tmp --consensus manual-seal-3000
 # or via docker
-docker run --rm polkadot-sdk-minimal-template
+docker run --rm qxchain
 ```
 
 ### Zombienet with Omni Node
@@ -151,9 +184,9 @@ and `zombienet-omni-node.toml` contains the network specification we want to sta
 
 #### Update `zombienet-omni-node.toml` with a valid chain spec path
 
-To simplify the process of starting the minimal template with ZombieNet and Omni Node, we've included a
-pre-configured development chain spec (dev_chain_spec.json) in the minimal template. The zombienet-omni-node.toml
-file in this template points to it, but you can update it to a new path for the chain spec generated on your machine.
+To simplify the process of starting QX Chain with ZombieNet and Omni Node, we've included a
+pre-configured development chain spec (dev_chain_spec.json) in QX Chain. The zombienet-omni-node.toml
+file points to it, but you can update it to a new path for the chain spec generated on your machine.
 To generate a chain spec refer to [staging-chain-spec-builder](https://crates.io/crates/staging-chain-spec-builder)
 
 Then make the changes in the network specification like so:
@@ -194,18 +227,18 @@ available on [IPFS](https://dotapps.io/).
 
 ### Takeaways
 
-Previously minimal template's development chains:
+Previously QX Chain development chains:
 
-- ❌ Started in a multi-node setup will produce forks because minimal lacks consensus.
+- ❌ Started in a multi-node setup will produce forks because QX Chain lacks consensus.
 - 🧹 Do not persist the state.
 - 💰 Are pre-configured with a genesis state that includes several pre-funded development accounts.
 - 🧑‍⚖️ One development account (`ALICE`) is used as `sudo` accounts.
 
 ## Contributing
 
-- 🔄 This template is automatically updated after releases in the main [Polkadot SDK monorepo](https://github.com/paritytech/polkadot-sdk).
+- 🔄 QX Chain is built on the Polkadot SDK framework.
 
-- ➡️ Any pull requests should be directed to this [source](https://github.com/paritytech/polkadot-sdk/tree/master/templates/minimal).
+- ➡️ For QX Chain specific contributions, please check the project repository.
 
 - 😇 Please refer to the monorepo's
 [contribution guidelines](https://github.com/paritytech/polkadot-sdk/blob/master/docs/contributor/CONTRIBUTING.md) and
