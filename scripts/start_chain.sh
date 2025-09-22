@@ -106,7 +106,7 @@ if [ ! -f "./target/release/qxchain" ]; then
 fi
 
 echo -e "${BLUE}📋 Starting chain with command:${NC}"
-echo -e "${BLUE}   ./target/release/qxchain --dev --consensus=instant-seal --rpc-port=$CHAIN_PORT --rpc-cors=all --rpc-methods=unsafe${NC}"
+echo -e "${BLUE}   ./target/release/qxchain --dev --tmp --consensus=instant-seal --rpc-port=$CHAIN_PORT --rpc-cors=all --rpc-methods=unsafe${NC}"
 echo ""
 echo -e "${YELLOW}🔧 Instant Seal Mode: Blocks created ONLY when transactions occur${NC}"
 echo -e "${YELLOW}💡 No automatic block production - purely transaction-driven${NC}"
@@ -117,15 +117,26 @@ echo -e "${YELLOW}💡 Chain will run in foreground. Press Ctrl+C to stop.${NC}"
 echo -e "${YELLOW}📄 Logs will be shown in terminal and also saved to: $LOG_DIR/chain.log${NC}"
 echo ""
 
+# Create pre-funded accounts for testing
+echo -e "${BLUE}💰 Setting up pre-funded test accounts...${NC}"
+echo -e "${YELLOW}📋 Pre-funded test accounts that will be available:${NC}"
+echo -e "${GREEN}   //Alice, //Bob, //Charlie, //Dave, //Eve, //Ferdie${NC}"
+echo -e "${GREEN}   Each funded with: 1,000,000,000 tokens (development)${NC}"
+echo -e "${YELLOW}💡 Using --tmp so fresh genesis balances apply on each start${NC}"
+echo -e "${YELLOW}💡 Workers and validators can use any of these accounts for staking${NC}"
+echo ""
+
 # Use tee to show logs in terminal AND save to file  
 ./target/release/qxchain \
     --dev \
+    --tmp \
     --consensus=instant-seal \
     --rpc-port=$CHAIN_PORT \
     --rpc-cors=all \
     --rpc-methods=unsafe \
     --log=info,manual_seal=debug,sc_consensus_manual_seal=debug,runtime=debug \
     --detailed-log-output \
+    --alice \
     2>&1 | tee "$LOG_DIR/chain.log"
 
 # Chain will run in foreground - no process management needed

@@ -24,7 +24,7 @@ class OllamaWorker:
     def __init__(self, 
                  chain_endpoint: str = "ws://localhost:9944",
                  ollama_endpoint: str = "http://localhost:11434",
-                 worker_seed: str = "//Alice//stash"):
+                 worker_seed: str = "//Bob"):
         
         self.substrate = SubstrateInterface(url=chain_endpoint)
         self.ollama_endpoint = ollama_endpoint
@@ -51,7 +51,7 @@ class OllamaWorker:
             print(f"⚠️ Chain connection unhealthy: {e}")
             return False
         
-    async def register_worker(self, stake_amount: int = 1000000):
+    async def register_worker(self, stake_amount: int = 900):
         """Register this node as a worker on the chain"""
         try:
             call = self.substrate.compose_call(
@@ -72,18 +72,35 @@ class OllamaWorker:
                 self.registered = True
                 return True
             else:
+                # Handle already-registered case gracefully
+                err = receipt.error_message
+                err_str = str(err)
+                already = False
+                if isinstance(err, dict):
+                    already = err.get('name') == 'WorkerAlreadyRegistered'
+                if 'WorkerAlreadyRegistered' in err_str:
+                    already = True
+                if already:
+                    print("ℹ️ Worker already registered. Continuing.")
+                    self.registered = True
+                    return True
                 print(f"❌ Worker registration failed: {receipt.error_message}")
                 return False
                 
         except Exception as e:
+            # If the error indicates already registered, proceed
+            if 'WorkerAlreadyRegistered' in str(e):
+                print("ℹ️ Worker already registered (from exception). Continuing.")
+                self.registered = True
+                return True
             print(f"❌ Error registering worker: {e}")
             return False
     
-    async def register_model(self, model_name: str, ollama_model: str, endpoint: str):
-        """Register a model on the chain"""
+    async def register_model(self, model_name: str, ollama_model: str, endpoint: str, seed: int = 42, temperature: float = 0.7, max_tokens: int = 512):
+        """Register a model on the chain with deterministic parameters"""
         try:
             # Generate model hash (simplified for MVP)
-            model_hash = hashlib.sha256(f"{model_name}:{ollama_model}".encode()).digest()
+            model_hash = hashlib.sha256(f"{model_name}:{ollama_model}:{seed}".encode()).digest()
             
             # Chain doesn't support register_model yet, register locally
             model_id = len(self.models)  # Simple ID assignment
@@ -91,9 +108,13 @@ class OllamaWorker:
                 'name': model_name,
                 'ollama_model': ollama_model,
                 'endpoint': endpoint,
-                'hash': model_hash
+                'hash': model_hash,
+                'seed': seed,
+                'temperature': temperature,
+                'max_tokens': max_tokens
             }
             print(f"✅ Model registered locally: {model_name} (ID: {model_id})")
+            print(f"   Deterministic params - Seed: {seed}, Temperature: {temperature}, Max tokens: {max_tokens}")
             return model_id
             
         except Exception as e:
@@ -101,7 +122,7 @@ class OllamaWorker:
             return None
     
     async def run_inference(self, model_id: int, prompt: str) -> Optional[str]:
-        """Run inference using Ollama"""
+        """Run inference using Ollama with deterministic parameters"""
         try:
             if model_id not in self.models:
                 print(f"❌ Model ID {model_id} not found")
@@ -109,22 +130,40 @@ class OllamaWorker:
                 
             model_info = self.models[model_id]
             ollama_model = model_info['ollama_model']
+            seed = model_info.get('seed', 42)
+            temperature = model_info.get('temperature', 0.7)
+            max_tokens = model_info.get('max_tokens', 512)
             
-            # Call Ollama API
+            print(f"🤖 Running inference with deterministic parameters:")
+            print(f"   Model: {ollama_model}")
+            print(f"   Seed: {seed}")
+            print(f"   Temperature: {temperature}")
+            print(f"   Max tokens: {max_tokens}")
+            
+            # Call Ollama API with deterministic parameters
             response = requests.post(
                 f"{self.ollama_endpoint}/api/generate",
                 json={
                     "model": ollama_model,
                     "prompt": prompt,
-                    "stream": False
+                    "stream": False,
+                    "options": {
+                        "seed": seed,
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                        "top_k": 40,
+                        "top_p": 0.9,
+                        "repeat_penalty": 1.1
+                    }
                 },
-                timeout=30
+                timeout=60
             )
             
             if response.status_code == 200:
                 result = response.json()
                 output = result.get('response', '')
                 print(f"✅ Inference completed for model {model_id}")
+                print(f"   Output length: {len(output)} characters")
                 return output
             else:
                 print(f"❌ Ollama request failed: {response.status_code}")
@@ -156,7 +195,7 @@ class OllamaWorker:
                     
                     call = self.substrate.compose_call(
                         call_module='QxAi',
-                        call_function='request_inference'
+                        call_function='submit_inference'
                     )
                     
                     extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=self.keypair)
@@ -218,6 +257,9 @@ class OllamaWorker:
             prompt: str
             model_id: int = 0
         
+        class RegisterRequest(BaseModel):
+            stake: int = 900
+        
         @app.get("/")
         async def root():
             """Root endpoint redirects to API documentation"""
@@ -272,22 +314,33 @@ class OllamaWorker:
                 }
             return serializable_models
         
+        @app.post("/register")
+        async def register_endpoint(request: RegisterRequest):
+            """Register the worker on-chain with optional stake amount"""
+            success = await self.register_worker(stake_amount=request.stake)
+            if success:
+                return {"status": "success", "message": "Worker registered", "stake": request.stake}
+            raise HTTPException(status_code=500, detail="Worker registration failed")
+        
         print(f"🚀 Starting API server on port {port}")
         config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()
     
     async def setup_zoo_model(self):
-        """Setup a zoo assistant model"""
+        """Setup a zoo assistant model with deterministic parameters"""
         model_id = await self.register_model(
             model_name="zoo_assistant",
             ollama_model="gemma3:4b",  # Lightweight model for testing
-            endpoint=f"http://localhost:8000/inference"
+            endpoint=f"http://localhost:8000/inference",
+            seed=42,  # Fixed seed for deterministic inference
+            temperature=0.7,  # Consistent temperature
+            max_tokens=512  # Consistent max tokens
         )
         
         if model_id is not None:
             print(f"✅ Zoo assistant model setup complete (ID: {model_id})")
-            print(f"💡 Model ready for inference requests via API")
+            print(f"💡 Model ready for deterministic inference requests via API")
         
         return model_id
 
@@ -295,7 +348,7 @@ async def main():
     parser = argparse.ArgumentParser(description='QX Chain Ollama Worker')
     parser.add_argument('--chain', default='ws://localhost:9944', help='Chain endpoint')
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
-    parser.add_argument('--seed', default='//Alice//stash', help='Worker account seed')
+    parser.add_argument('--seed', default='//Bob', help='Worker account seed')
     parser.add_argument('--port', type=int, default=8000, help='API server port')
     parser.add_argument('--setup-zoo', action='store_true', help='Setup zoo assistant model')
     

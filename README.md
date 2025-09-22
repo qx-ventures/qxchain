@@ -1,257 +1,296 @@
-<div align="center">
+# QX Chain - Decentralized AI Inference Network
 
-# QX Chain
+QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a trustless environment where AI workers can submit inference results, and validators can challenge incorrect computations through a stake-based consensus mechanism.
 
-<img height="70px" alt="Polkadot SDK Logo" src="https://github.com/paritytech/polkadot-sdk/raw/master/docs/images/Polkadot_Logo_Horizontal_Pink_White.png#gh-dark-mode-only"/>
+## 🔑 Key Features
 
-> QX Chain - A blockchain for optimistic machine learning based on Polkadot SDK.
->
-> Built with Polkadot SDK for decentralized AI inference and validation.
+- **Decentralized AI Inference**: Workers submit AI model inference results to the blockchain
+- **Optimistic Validation**: Inferences are assumed correct unless challenged by validators
+- **Stake-based Security**: Workers stake 1,000+ tokens, validators stake 100+ tokens, with slashing for malicious behavior
+- **Multiple AI Models**: Support for various AI models through Ollama integration
+- **Real-time Validation**: Instant block production for immediate transaction processing
 
-</div>
+## 🏗️ Architecture
 
-## Table of Contents
+The QX Chain consists of several key components:
 
-- [Intro](#intro)
+- **QX Chain Node**: Polkadot SDK-based blockchain node with custom opML pallet
+- **AI Workers**: Python services that execute AI inference and submit results
+- **Validators**: Network participants who validate inference correctness
+- **opML Pallet**: Custom Substrate pallet implementing optimistic ML consensus
 
-- [Template Structure](#template-structure)
+## 📋 Prerequisites
 
-- [Getting Started](#getting-started)
+- **Rust** (stable toolchain)
+- **Python 3.8+**
+- **Ollama** (for AI model serving)
+- **Git**
 
-- [QX Chain Quick Start](#qx-chain-quick-start)
+## 🚀 Quick Start
 
-- [Starting QX Chain](#starting-qx-chain)
+### 1. Complete Setup (One-time)
 
-  - [Omni Node](#omni-node)
-  - [QX Chain Node](#qx-chain-node)
-  - [Zombienet with Omni Node](#zombienet-with-omni-node)
-  - [Zombienet with QX Chain Node](#zombienet-with-qx-chain-node)
-  - [Connect with the Polkadot-JS Apps Front-End](#connect-with-the-polkadot-js-apps-front-end)
-  - [Takeaways](#takeaways)
-
-- [Contributing](#contributing)
-
-- [Getting Help](#getting-help)
-
-## Intro
-
-- 🧠 QX Chain is an optimistic machine learning blockchain for decentralized AI inference.
-
-- 🔧 Its runtime is configured with custom pallets for ML workloads and standard pallets
-such as a [Balances pallet](https://paritytech.github.io/polkadot-sdk/master/pallet_balances/index.html).
-
-- 🤖 QX Chain supports AI model inference through workers and validators in a decentralized network.
-
-
-## QX Chain Structure
-
-QX Chain is a Polkadot SDK based project that consists of:
-
-- 🧮 the [Runtime](./runtime/README.md) - the core logic of the blockchain.
-- 🎨 the [Pallets](./pallets/README.md) - from which the runtime is constructed.
-- 💿 a [Node](./node/README.md) - the binary application (which is not part of the cargo default-members list and is not
-compiled unless building the entire workspace).
-
-## Getting Started
-
-- 🦀 The template is using the Rust language.
-
-- 👉 Check the
-[Rust installation instructions](https://www.rust-lang.org/tools/install) for your system.
-
-- 🛠️ Depending on your operating system and Rust version, there might be additional
-packages required to compile this template - please take note of the Rust compiler output.
-
-Fetch QX Chain code.
-
-```sh
-git clone <qx-chain-repository-url> qxchain
-
-cd qxchain
-```
-
-## QX Chain Quick Start
-
-### Using QX Chain Scripts (Recommended)
-
-For a complete QX Chain opML environment setup:
+Run the complete setup script to install dependencies, build the chain, and configure Ollama:
 
 ```bash
-# Complete setup (one time)
-./scripts/setup_qx_chain.sh
-
-# Run services in separate terminals:
-# Terminal 1
-./scripts/start_chain.sh
-
-# Terminal 2  
-./scripts/start_worker.sh
-
-# Terminal 3
-./scripts/start_validator.sh
+cd scripts
+./setup_qx_chain.sh
 ```
 
-**Service Information:**
-- **QX Chain**: `ws://localhost:9944`
-- **Ollama API**: `http://localhost:11434`  
-- **Worker API**: `http://localhost:8000`
+### 2. Start Services (In Separate Terminals)
 
-**Test the setup:**
+**Terminal 1 - Start QX Chain:**
 ```bash
-./scripts/test_inference.py
+cd scripts
+./start_chain.sh
 ```
 
-See [scripts/README.md](./scripts/README.md) for detailed script documentation.
-
-## Starting QX Chain
-
-### Omni Node
-
-[Omni Node](https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/omni_node/index.html) can
-be used to run the QX Chain runtime. `polkadot-omni-node` binary crate usage is described at a high-level
-[on crates.io](https://crates.io/crates/polkadot-omni-node).
-
-#### Install `polkadot-omni-node`
-
-Please see installation section on [crates.io/omni-node](https://crates.io/crates/polkadot-omni-node).
-
-#### Build `qxchain-runtime`
-
-```sh
-cargo build -p qxchain-runtime --release
+**Terminal 2 - Start AI Worker:**
+```bash
+cd scripts
+./start_worker.sh
 ```
 
-#### Install `staging-chain-spec-builder`
-
-Please see the installation section at [`crates.io/staging-chain-spec-builder`](https://crates.io/crates/staging-chain-spec-builder).
-
-#### Use chain-spec-builder to generate the chain_spec.json file
-
-```sh
-chain-spec-builder create --relay-chain "dev" --para-id 1000 --runtime \
-    target/release/wbuild/qxchain-runtime/qxchain_runtime.wasm named-preset development
+**Terminal 3 - Start Validator:**
+```bash
+cd scripts
+./start_validator.sh
 ```
 
-**Note**: the `relay-chain` and `para-id` flags are extra bits of information required to
-configure the node for the case of representing a parachain that is connected to a relay chain.
-They are not relevant to QX Chain business logic, but they are mandatory information for
-Omni Node, nonetheless.
+## 🔧 How to Run
 
-#### Run Omni Node
+### Running the Main Chain
 
-Start Omni Node in development mode (sets up block production and finalization based on manual seal,
-sealing a new block every 3 seconds), with a QX Chain runtime chain spec.
+To start the QX Chain node:
 
-```sh
-polkadot-omni-node --chain <path/to/chain_spec.json> --dev
+```bash
+# Navigate to scripts directory
+cd scripts
+
+# Start the blockchain node
+./start_chain.sh
 ```
 
-### QX Chain Node
+This will:
+- Start the QX Chain node on `ws://localhost:9944`
+- Enable instant-seal consensus (blocks created only when transactions occur)
+- Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
+- Show logs in terminal and save to `logs/chain.log`
 
-#### Build both node & runtime
+### Running AI Workers
 
-```sh
-cargo build --workspace --release
+To start an AI worker that processes inference requests:
+
+```bash
+# In a separate terminal
+cd scripts
+
+# Start the worker service
+./start_worker.sh
 ```
 
-🐳 Alternatively, build the docker image which builds all the workspace members,
-and has as entry point the node binary:
+The worker will:
+- Connect to Ollama for AI model inference
+- Listen for requests on `http://localhost:8000` (or dynamic port)
+- Submit inference results to the QX Chain
+- Log activities to `logs/worker.log`
 
-```sh
-docker build . -t qxchain
+### Running Validators
+
+To start a validator that monitors and validates inferences:
+
+```bash
+# In a separate terminal  
+cd scripts
+
+# Start the validator service
+./start_validator.sh
 ```
 
-#### Start the `qxchain`
+## 🧪 How to Test
 
-The `qxchain` has dependency on the `qxchain-runtime`. It will use
-the `qxchain_runtime::WASM_BINARY` constant (which holds the WASM blob as a byte
-array) for chain spec building, while starting. This is in contrast to Omni Node which doesn't
-depend on a specific runtime, but asks for the chain spec at startup.
+### Testing AI Inference Pipeline
 
-```sh
-target/release/qxchain --tmp --consensus manual-seal-3000
-# or via docker
-docker run --rm qxchain
+To test the complete opML inference pipeline:
+
+```bash
+cd scripts
+
+# Run the inference test script
+python test_inference.py
 ```
 
-### Zombienet with Omni Node
+This will:
+1. Submit an inference request to a worker
+2. Monitor the chain for inference submission
+3. Wait for validator challenges/approvals
+4. Display the final result
 
-#### Install `zombienet`
+### Custom Test Parameters
 
-We can install `zombienet` as described [here](https://paritytech.github.io/zombienet/install.html#installation),
-and `zombienet-omni-node.toml` contains the network specification we want to start.
+You can customize the test with different parameters:
 
+```bash
+# Test with custom prompt
+python test_inference.py --prompt "What is machine learning?" --model 0
 
-#### Update `zombienet-omni-node.toml` with a valid chain spec path
-
-To simplify the process of starting QX Chain with ZombieNet and Omni Node, we've included a
-pre-configured development chain spec (dev_chain_spec.json) in QX Chain. The zombienet-omni-node.toml
-file points to it, but you can update it to a new path for the chain spec generated on your machine.
-To generate a chain spec refer to [staging-chain-spec-builder](https://crates.io/crates/staging-chain-spec-builder)
-
-Then make the changes in the network specification like so:
-
-```toml
-# ...
-chain = "dev"
-chain_spec_path = "<TO BE UPDATED WITH A VALID PATH>"
-default_args = ["--dev"]
-# ..
+# Test with different endpoints
+python test_inference.py --worker http://localhost:8001 --chain ws://localhost:9944
 ```
 
-#### Start the network
+### Manual API Testing
 
-```sh
-zombienet --provider native spawn zombienet-omni-node.toml
+Test the worker API directly:
+
+```bash
+# Test inference endpoint
+curl -X POST http://localhost:8000/inference \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Hello, how are you?", "model_id": 0}'
+
+# Check worker status
+curl http://localhost:8000/status
 ```
 
-### Zombienet with `qxchain`
+### Testing Individual Components
 
-For this one we just need to have `zombienet` installed and run:
-
-```sh
-zombienet --provider native spawn zombienet-multi-node.toml
+**Test Setup:**
+```bash
+cd scripts
+./test_setup.sh
 ```
 
-### Connect with the Polkadot-JS Apps Front-End
+**Test Dependencies:**
+```bash
+cd scripts
+./check_dependencies.sh
+```
 
-- 🌐 You can interact with your local node using the
-hosted version of the [Polkadot/Substrate
-Portal](https://polkadot.js.org/apps/#/explorer?rpc=ws://localhost:9944).
+## 🌐 Service Endpoints
 
-- 🪐 A hosted version is also
-available on [IPFS](https://dotapps.io/).
+- **QX Chain RPC**: `ws://localhost:9944`
+- **QX Chain HTTP**: `http://localhost:9944`
+- **Ollama API**: `http://localhost:11434`
+- **Worker API**: `http://localhost:8000` (dynamic port assignment)
 
-- 🧑‍🔧 You can also find the source code and instructions for hosting your own instance in the
-[`polkadot-js/apps`](https://github.com/polkadot-js/apps) repository.
+## 📁 Project Structure
 
-### Takeaways
+```
+qxchain/
+├── node/                    # Blockchain node implementation
+├── runtime/                 # Runtime logic and configuration  
+├── pallets/
+│   ├── pallet-qx-ai/       # Custom opML pallet
+│   └── template/           # Template pallet
+├── scripts/                # Setup and service scripts
+│   ├── setup_qx_chain.sh   # Complete setup
+│   ├── start_chain.sh      # Start blockchain
+│   ├── start_worker.sh     # Start AI worker
+│   ├── start_validator.sh  # Start validator
+│   ├── test_inference.py   # Test inference pipeline
+│   └── ollama_worker.py    # Worker implementation
+└── logs/                   # Service logs
+```
 
-Previously QX Chain development chains:
+## 🎯 opML Workflow
 
-- ❌ Started in a multi-node setup will produce forks because QX Chain lacks consensus.
-- 🧹 Do not persist the state.
-- 💰 Are pre-configured with a genesis state that includes several pre-funded development accounts.
-- 🧑‍⚖️ One development account (`ALICE`) is used as `sudo` accounts.
+1. **Worker Registration**: AI workers stake tokens and register on-chain
+2. **Inference Submission**: Workers process AI requests and submit results
+3. **Challenge Period**: Validators can challenge incorrect inferences
+4. **Validation**: Consensus determines if inference is correct
+5. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
 
-## Contributing
+## 🛠️ Development
 
-- 🔄 QX Chain is built on the Polkadot SDK framework.
+### Building from Source
 
-- ➡️ For QX Chain specific contributions, please check the project repository.
+```bash
+# Build the chain
+cargo build --release
 
-- 😇 Please refer to the monorepo's
-[contribution guidelines](https://github.com/paritytech/polkadot-sdk/blob/master/docs/contributor/CONTRIBUTING.md) and
-[Code of Conduct](https://github.com/paritytech/polkadot-sdk/blob/master/docs/contributor/CODE_OF_CONDUCT.md).
+# Build specific components
+cd node && cargo build --release
+cd runtime && cargo build --release
+cd pallets/pallet-qx-ai && cargo build --release
+```
 
-## Getting Help
+### Running Tests
 
-- 🧑‍🏫 To learn about Polkadot in general, [docs.Polkadot.com](https://docs.polkadot.com/) website is a good starting point.
+```bash
+# Run Rust tests
+cargo test
 
-- 🧑‍🔧 For technical introduction, [here](https://github.com/paritytech/polkadot-sdk#-documentation) are
-the Polkadot SDK documentation resources.
+# Run Python tests
+cd scripts
+python -m pytest test_*.py
+```
 
-- 👥 Additionally, there are [GitHub issues](https://github.com/paritytech/polkadot-sdk/issues) and
-[Substrate StackExchange](https://substrate.stackexchange.com/).
-- 👥You can also reach out on the [Official Polkdot discord server](https://polkadot-discord.w3f.tools/)
-- 🧑Reach out on [Telegram](https://t.me/substratedevs) for more questions and discussions
+## 🔍 Monitoring
+
+### Logs
+
+All services save logs to the `logs/` directory:
+- `chain.log` - Blockchain node logs
+- `worker.log` - AI worker logs  
+- `validator_*.log` - Validator logs
+
+### Chain Status
+
+Check chain status via RPC:
+```bash
+curl -X POST http://localhost:9944 \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"jsonrpc":"2.0","method":"system_health","params":[]}'
+```
+
+## 🛑 Stopping Services
+
+To stop all services:
+- Press `Ctrl+C` in each terminal running the services
+- Or use the cleanup script: `./scripts/cleanup.sh` (if available)
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Build Issues**: Run `./scripts/check_dependencies.sh`
+2. **Ollama Issues**: Re-run `./scripts/setup_ollama.sh`
+3. **Port Conflicts**: Stop services with `Ctrl+C` and restart
+4. **Missing Dependencies**: Ensure Rust, Python, and Ollama are properly installed
+
+### Worker Registration Fails with "InsufficientBalance"
+
+**Problem**: Worker fails to register with error `InsufficientBalance`
+
+**Root Cause**: The worker account doesn't have enough tokens for staking
+
+**Solution**: Each test account has exactly 1,000 tokens, which is the minimum required:
+- Workers need minimum 1,000 tokens to stake
+- Validators need minimum 100 tokens to stake  
+- Transaction fees are minimal (1 token per transaction)
+
+**Pre-funded Test Accounts** (all have 1,000 tokens):
+- `//Alice` - Root/Sudo account
+- `//Bob` - Default worker account  
+- `//Charlie` - Default validator account
+- `//Dave`, `//Eve`, `//Ferdie` - Additional test accounts
+
+**Quick Fix**: The scripts now use the correct minimum stake amounts (1,000 for workers, 100 for validators)
+
+## 📝 License
+
+This project is licensed under MIT-0 License. See [LICENSE](LICENSE) for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
+
+## 📚 Learn More
+
+- [Polkadot SDK Documentation](https://paritytech.github.io/polkadot-sdk/)
+- [FRAME Framework](https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/polkadot_sdk/frame_runtime/index.html)
+- [Substrate Development](https://docs.substrate.io/)

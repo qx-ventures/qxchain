@@ -23,7 +23,7 @@ class QXValidator:
     def __init__(self, 
                  chain_endpoint: str = "ws://localhost:9944",
                  ollama_endpoint: str = "http://localhost:11434",
-                 validator_seed: str = "//Bob//stash"):
+                 validator_seed: str = "//Charlie"):
         
         self.substrate = SubstrateInterface(url=chain_endpoint)
         self.ollama_endpoint = ollama_endpoint
@@ -39,13 +39,13 @@ class QXValidator:
         self.running = False
         self.processed_inferences = set()  # Track processed inference IDs
         
-    async def register_validator(self, stake_amount: int = 1000000):
+    async def register_validator(self, stake_amount: int = 1000):
         """Register this node as a validator (requires sudo/governance)"""
         try:
-            # Chain doesn't have register_validator yet, use register_worker
             call = self.substrate.compose_call(
                 call_module='QxAi',
-                call_function='register_worker'
+                call_function='register_validator',
+                call_params={'stake': stake_amount}
             )
             
             # Note: This requires sudo privileges in MVP
@@ -62,10 +62,27 @@ class QXValidator:
                 self.registered = True
                 return True
             else:
+                # Handle already-registered case gracefully
+                err = receipt.error_message
+                err_str = str(err)
+                already = False
+                if isinstance(err, dict):
+                    already = err.get('name') == 'ValidatorAlreadyRegistered'
+                if 'ValidatorAlreadyRegistered' in err_str:
+                    already = True
+                if already:
+                    print("ℹ️ Validator already registered. Continuing.")
+                    self.registered = True
+                    return True
                 print(f"❌ Validator registration failed: {receipt.error_message}")
                 return False
                 
         except Exception as e:
+            # If the error indicates already registered, proceed
+            if 'ValidatorAlreadyRegistered' in str(e):
+                print("ℹ️ Validator already registered (from exception). Continuing.")
+                self.registered = True
+                return True
             print(f"❌ Error registering validator: {e}")
             return False
     
@@ -156,14 +173,14 @@ class QXValidator:
             print(f"❌ Error getting model info: {e}")
             return None
     
-    async def verify_inference(self, inference: Dict, model_info: Dict) -> tuple[bool, str]:
-        """Verify an inference by re-running it"""
+    async def verify_inference_deterministic(self, inference: Dict, model_info: Dict, original_input: str) -> tuple[bool, str]:
+        """Verify an inference by re-running it with deterministic parameters"""
         try:
-            # For MVP, we'll extract the original prompt from the worker's endpoint
-            # In production, this would be more sophisticated
-            
-            # Try to determine the model name for Ollama
+            # Extract deterministic parameters from model info
             model_name = model_info['name']
+            seed = model_info.get('seed', 42)
+            temperature = model_info.get('temperature', 700) / 1000.0  # Convert back from stored format
+            max_tokens = model_info.get('max_tokens', 512)
             
             # Map model names to Ollama models
             ollama_model_map = {
@@ -174,8 +191,68 @@ class QXValidator:
             
             ollama_model = ollama_model_map.get(model_name, 'gemma3:4b')
             
-            # For MVP, we'll use a test prompt to verify model behavior
-            # In production, we'd need to store/reconstruct the original input
+            print(f"🔍 Running deterministic inference verification:")
+            print(f"   Model: {ollama_model}")
+            print(f"   Seed: {seed}")
+            print(f"   Temperature: {temperature}")
+            print(f"   Max tokens: {max_tokens}")
+            
+            # Run inference with exact same parameters as worker should have used
+            response = requests.post(
+                f"{self.ollama_endpoint}/api/generate",
+                json={
+                    "model": ollama_model,
+                    "prompt": original_input,
+                    "stream": False,
+                    "options": {
+                        "seed": seed,
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                        "top_k": 40,
+                        "top_p": 0.9,
+                        "repeat_penalty": 1.1
+                    }
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                expected_output = result.get('response', '')
+                actual_output = inference['output']
+                
+                # Calculate output hash for comparison
+                expected_hash = hashlib.sha256(expected_output.encode()).digest()
+                actual_hash = inference['output_hash']
+                
+                print(f"   Expected hash: {expected_hash.hex()}")
+                print(f"   Actual hash: {actual_hash.hex()}")
+                
+                # For deterministic verification, hashes should match exactly
+                is_valid = expected_hash == actual_hash
+                
+                if not is_valid:
+                    print(f"❌ Hash mismatch detected!")
+                    print(f"   Expected output length: {len(expected_output)}")
+                    print(f"   Actual output length: {len(actual_output)}")
+                    print(f"   Expected preview: {expected_output[:100]}...")
+                    print(f"   Actual preview: {actual_output[:100]}...")
+                
+                return is_valid, expected_output
+            else:
+                print(f"❌ Ollama verification failed: {response.status_code}")
+                return False, ""
+                
+        except Exception as e:
+            print(f"❌ Error verifying inference: {e}")
+            return False, ""
+
+    async def verify_inference(self, inference: Dict, model_info: Dict) -> tuple[bool, str]:
+        """Legacy verify method - fallback for MVP testing"""
+        try:
+            # For MVP when we don't have the original input, use test prompts
+            model_name = model_info['name']
+            
             test_prompts = {
                 'zoo_assistant': "What are the zoo's operating hours?",
                 'permits_assistant': "How do I apply for a building permit?",
@@ -184,33 +261,8 @@ class QXValidator:
             
             test_prompt = test_prompts.get(model_name, "Hello, how can you help?")
             
-            # Run inference with Ollama
-            response = requests.post(
-                f"{self.ollama_endpoint}/api/generate",
-                json={
-                    "model": ollama_model,
-                    "prompt": test_prompt,
-                    "stream": False
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                expected_output = result.get('response', '')
-                
-                # For MVP: Simple comparison
-                # In production: More sophisticated verification
-                actual_output = inference['output']
-                
-                # Check if outputs are reasonably similar (length-based heuristic for MVP)
-                if abs(len(expected_output) - len(actual_output)) < 50:
-                    return True, expected_output
-                else:
-                    return False, expected_output
-            else:
-                print(f"❌ Ollama verification failed: {response.status_code}")
-                return False, ""
+            # Use deterministic verification with test prompt
+            return await self.verify_inference_deterministic(inference, model_info, test_prompt)
                 
         except Exception as e:
             print(f"❌ Error verifying inference: {e}")
@@ -335,6 +387,9 @@ class QXValidator:
             inference_id: int
             expected_output: str
         
+        class RegisterRequest(BaseModel):
+            stake: int = 1000
+        
         @app.get("/")
         async def root():
             """Root endpoint redirects to API documentation"""
@@ -420,6 +475,14 @@ class QXValidator:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
         
+        @app.post("/register")
+        async def register_endpoint(request: RegisterRequest):
+            """Register the validator on-chain with optional stake amount"""
+            success = await self.register_validator(stake_amount=request.stake)
+            if success:
+                return {"status": "success", "message": "Validator registered", "stake": request.stake}
+            raise HTTPException(status_code=500, detail="Validator registration failed")
+        
         @app.get("/models/{model_id}")
         async def model_info_endpoint(model_id: int):
             """Get information about a specific model"""
@@ -462,7 +525,7 @@ async def main():
     parser = argparse.ArgumentParser(description='QX Chain Validator')
     parser.add_argument('--chain', default='ws://localhost:9944', help='Chain endpoint')
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
-    parser.add_argument('--seed', default='//Bob//stash', help='Validator account seed')
+    parser.add_argument('--seed', default='//Charlie', help='Validator account seed')
     parser.add_argument('--interval', type=int, default=10, help='Validation interval in seconds')
     parser.add_argument('--register', action='store_true', help='Register as validator (requires sudo)')
     parser.add_argument('--port', type=int, default=8001, help='API server port')
