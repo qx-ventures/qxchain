@@ -222,6 +222,7 @@ impl pallet_qx_ai::Config for Runtime {
 	type MinChallengeStake = ConstU64<100>; // 100 units
 	type ChallengePeriod = ConstU32<100>; // 100 blocks
 	type SlashThreshold = ConstU32<51>; // 51% majority
+	type MaxQueueSize = ConstU32<100>; // Maximum 100 requests per worker queue
 }
 
 type Block = frame::runtime::types_common::BlockOf<Runtime, TxExtension>;

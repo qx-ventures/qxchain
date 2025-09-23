@@ -1,23 +1,26 @@
 # QX Chain - Decentralized AI Inference Network
 
-QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a trustless environment where AI workers can submit inference results, and validators can challenge incorrect computations through a stake-based consensus mechanism.
+QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a trustless environment where customers submit AI inference requests to workers, and validators can challenge incorrect computations through a stake-based consensus mechanism.
 
 ## 🔑 Key Features
 
-- **Decentralized AI Inference**: Workers submit AI model inference results to the blockchain
+- **Request-Based AI Inference**: Customers submit requests to specific workers who process AI inference
+- **Worker Queue Management**: Workers maintain queues of pending requests with configurable limits
 - **Optimistic Validation**: Inferences are assumed correct unless challenged by validators
 - **Stake-based Security**: Workers stake 1,000+ tokens, validators stake 100+ tokens, with slashing for malicious behavior
 - **Multiple AI Models**: Support for various AI models through Ollama integration
-- **Real-time Validation**: Instant block production for immediate transaction processing
+- **Real-time Status Tracking**: Monitor worker availability, request status, and inference results
+- **Interactive Customer Interface**: User-friendly interface for browsing workers and submitting requests
 
 ## 🏗️ Architecture
 
 The QX Chain consists of several key components:
 
 - **QX Chain Node**: Polkadot SDK-based blockchain node with custom opML pallet
-- **AI Workers**: Python services that execute AI inference and submit results
+- **AI Workers**: Python services that process inference requests and submit results to blockchain
+- **Customers**: Users who submit inference requests through interactive interface
 - **Validators**: Network participants who validate inference correctness
-- **opML Pallet**: Custom Substrate pallet implementing optimistic ML consensus
+- **opML Pallet**: Custom Substrate pallet implementing optimistic ML consensus with request queuing
 
 ## 📋 Prerequisites
 
@@ -55,6 +58,12 @@ cd scripts
 ```bash
 cd scripts
 ./start_validator.sh
+```
+
+**Terminal 4 - Start Customer Interface:**
+```bash
+cd scripts
+./start_customer.sh
 ```
 
 ## 🔧 How to Run
@@ -107,11 +116,42 @@ cd scripts
 ./start_validator.sh
 ```
 
+### Running Customer Interface
+
+To start the interactive customer interface for submitting inference requests:
+
+```bash
+# In a separate terminal
+cd scripts
+
+# Start the customer interface
+./start_customer.sh
+```
+
+The customer interface provides:
+- Browse available workers and their status
+- Submit inference requests to specific workers
+- Monitor request status and retrieve results
+- Interactive menu for easy navigation
+
 ## 🧪 How to Test
 
 ### Testing AI Inference Pipeline
 
-To test the complete opML inference pipeline:
+**Option 1: Interactive Customer Interface (Recommended)**
+
+```bash
+cd scripts
+./start_customer.sh
+```
+
+This provides a user-friendly interface to:
+1. Browse available workers
+2. Submit inference requests
+3. Monitor request status
+4. View results
+
+**Option 2: Automated Test Script**
 
 ```bash
 cd scripts
@@ -171,7 +211,7 @@ cd scripts
 - **QX Chain RPC**: `ws://localhost:9944`
 - **QX Chain HTTP**: `http://localhost:9944`
 - **Ollama API**: `http://localhost:11434`
-- **Worker API**: `http://localhost:8000` (dynamic port assignment)
+- **Customer Interface**: Interactive terminal interface via `start_customer.sh`
 
 ## 📁 Project Structure
 
@@ -187,18 +227,31 @@ qxchain/
 │   ├── start_chain.sh      # Start blockchain
 │   ├── start_worker.sh     # Start AI worker
 │   ├── start_validator.sh  # Start validator
+│   ├── start_customer.sh   # Start customer interface
+│   ├── customer.py         # Customer interface implementation
 │   ├── test_inference.py   # Test inference pipeline
-│   └── ollama_worker.py    # Worker implementation
+│   ├── ollama_worker.py    # Worker implementation
+│   └── validator.py        # Validator implementation
 └── logs/                   # Service logs
 ```
 
 ## 🎯 opML Workflow
 
-1. **Worker Registration**: AI workers stake tokens and register on-chain
-2. **Inference Submission**: Workers process AI requests and submit results
-3. **Challenge Period**: Validators can challenge incorrect inferences
-4. **Validation**: Consensus determines if inference is correct
-5. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
+1. **Worker Registration**: AI workers stake tokens and register on-chain with status tracking
+2. **Request Submission**: Customers submit inference requests to specific workers
+3. **Queue Management**: Workers maintain queues of pending requests (max 100 per worker)
+4. **Inference Processing**: Workers process requests and submit results to blockchain
+5. **Challenge Period**: Validators can challenge incorrect inferences
+6. **Validation**: Consensus determines if inference is correct
+7. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
+
+## 🔄 Request Lifecycle
+
+1. **Queued**: Request submitted to worker's queue
+2. **Assigned**: Request assigned to worker for processing
+3. **Processing**: Worker executing AI inference
+4. **Completed**: Result submitted to blockchain
+5. **Validated**: Result validated by network consensus
 
 ## 🛠️ Development
 

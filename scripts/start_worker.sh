@@ -119,23 +119,44 @@ fi
 WORKER_ID="worker_$(date +%s)_$$"
 LOG_FILE="$LOG_DIR/${WORKER_ID}.log"
 
+# Check for interactive mode
+INTERACTIVE_MODE=""
+if [ "$1" = "--interactive" ] || [ "$1" = "-i" ]; then
+    INTERACTIVE_MODE="--interactive"
+fi
+
 echo -e "${BLUE}🤖 Starting Ollama Worker...${NC}"
 echo -e "${BLUE}📋 Worker ID: $WORKER_ID${NC}"
-echo -e "${BLUE}📋 API Server port: $WORKER_PORT${NC}"
+if [ -z "$INTERACTIVE_MODE" ]; then
+    echo -e "${BLUE}📋 API Server port: $WORKER_PORT${NC}"
+    echo -e "${GREEN}🌐 API Documentation available at: http://localhost:$WORKER_PORT/docs${NC}"
+    echo -e "${GREEN}🔍 Worker Status available at: http://localhost:$WORKER_PORT/status${NC}"
+else
+    echo -e "${BLUE}🎮 Starting in interactive mode${NC}"
+    echo -e "${YELLOW}💡 You can manually review and execute inference requests${NC}"
+fi
 echo -e "${YELLOW}💡 Worker will run in foreground. Press Ctrl+C to stop.${NC}"
 echo -e "${YELLOW}📄 Logs will be shown in terminal and also saved to: $LOG_FILE${NC}"
-echo -e "${GREEN}🌐 API Documentation available at: http://localhost:$WORKER_PORT/docs${NC}"
-echo -e "${GREEN}🔍 Worker Status available at: http://localhost:$WORKER_PORT/status${NC}"
 echo ""
 
 cd "$SCRIPT_DIR"
 source .venv/bin/activate
-python ollama_worker.py \
-    --chain="ws://localhost:$CHAIN_PORT" \
-    --ollama="http://localhost:$OLLAMA_PORT" \
-    --port=$WORKER_PORT \
-    --setup-zoo \
-    2>&1 | tee "../$LOG_FILE"
+
+if [ -z "$INTERACTIVE_MODE" ]; then
+    python ollama_worker.py \
+        --chain="ws://localhost:$CHAIN_PORT" \
+        --ollama="http://localhost:$OLLAMA_PORT" \
+        --port=$WORKER_PORT \
+        --setup-zoo \
+        2>&1 | tee "../$LOG_FILE"
+else
+    python ollama_worker.py \
+        --chain="ws://localhost:$CHAIN_PORT" \
+        --ollama="http://localhost:$OLLAMA_PORT" \
+        --setup-zoo \
+        --interactive \
+        2>&1 | tee "../$LOG_FILE"
+fi
 
 # Worker will run in foreground - no process management needed
 # When process exits, script exits automatically

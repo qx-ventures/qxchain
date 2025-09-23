@@ -371,138 +371,201 @@ class QXValidator:
         except Exception as e:
             print(f"❌ Error processing pending inferences: {e}")
     
-    async def start_api_server(self, port: int = 8001):
-        """Start HTTP API server for monitoring validator status"""
-        from fastapi import FastAPI, HTTPException
-        from fastapi.responses import RedirectResponse
-        from pydantic import BaseModel
-        import uvicorn
+    
+    async def interactive_mode(self):
+        """Interactive mode for manual validation control"""
+        print("🎮 Starting Interactive Validator Mode...")
+        print("🎯 You can manually review and validate/challenge inferences")
         
-        app = FastAPI(title="QX Chain Validator API")
-        
-        class ValidateRequest(BaseModel):
-            inference_id: int
-        
-        class ChallengeRequest(BaseModel):
-            inference_id: int
-            expected_output: str
-        
-        class RegisterRequest(BaseModel):
-            stake: int = 1000
-        
-        @app.get("/")
-        async def root():
-            """Root endpoint redirects to API documentation"""
-            return RedirectResponse(url="/docs")
-        
-        @app.get("/status")
-        async def status_endpoint():
-            """Get validator status and configuration"""
-            current_block = None
+        try:
+            while True:
+                print("\n" + "="*60)
+                print("🛡️ QX Chain Validator Interactive Mode")
+                print("="*60)
+                print("1. 📋 Check pending inferences")
+                print("2. 🔍 Show specific inference details")
+                print("3. ✅ Validate specific inference")
+                print("4. ❌ Challenge specific inference")
+                print("5. 🔄 Process all pending inferences")
+                print("6. 📊 Show validator status")
+                print("7. 🔄 Refresh validator registration")
+                print("8. 🚪 Exit interactive mode")
+                print("-" * 60)
+                
+                choice = input("Select option (1-8): ").strip()
+                
+                if choice == "1":
+                    await self.show_pending_inferences()
+                elif choice == "2":
+                    await self.show_inference_details()
+                elif choice == "3":
+                    await self.validate_inference_interactive()
+                elif choice == "4":
+                    await self.challenge_inference_interactive()
+                elif choice == "5":
+                    await self.process_pending_inferences()
+                elif choice == "6":
+                    await self.show_validator_status()
+                elif choice == "7":
+                    await self.refresh_validator_registration()
+                elif choice == "8":
+                    print("🚪 Exiting interactive mode...")
+                    break
+                else:
+                    print("❌ Invalid option. Please choose 1-8.")
+                    
+        except KeyboardInterrupt:
+            print("\n🛑 Interactive mode interrupted")
+        except Exception as e:
+            print(f"❌ Interactive mode error: {e}")
+        finally:
+            print("🎮 Interactive mode stopped")
+    
+    async def show_pending_inferences(self):
+        """Show all pending inferences"""
+        try:
+            print("\n🔍 Fetching pending inferences...")
+            pending = await self.get_pending_inferences()
+            
+            if not pending:
+                print("📭 No pending inferences found")
+                return
+            
+            print(f"\n📋 Found {len(pending)} pending inferences:")
+            print("-" * 100)
+            print(f"{'ID':<4} {'Worker':<50} {'Model':<6} {'Submitted':<10} {'Output Preview'}")
+            print("-" * 100)
+            
+            for inference in pending:
+                worker_short = inference['worker'][:47] + "..." if len(inference['worker']) > 50 else inference['worker']
+                output_preview = inference['output'][:30] + "..." if len(inference['output']) > 30 else inference['output']
+                print(f"{inference['id']:<4} {worker_short:<50} {inference['model_id']:<6} {inference['submitted_at']:<10} {output_preview}")
+            
+            print("-" * 100)
+            
+        except Exception as e:
+            print(f"❌ Error showing pending inferences: {e}")
+    
+    async def show_inference_details(self):
+        """Show detailed information for a specific inference"""
+        try:
+            inference_id = input("\n📋 Enter inference ID to view details: ").strip()
+            if not inference_id.isdigit():
+                print("❌ Invalid inference ID")
+                return
+                
+            inference_id = int(inference_id)
+            pending = await self.get_pending_inferences()
+            inference = next((inf for inf in pending if inf['id'] == inference_id), None)
+            
+            if not inference:
+                print(f"❌ Inference {inference_id} not found in pending list")
+                return
+            
+            print(f"\n📄 Inference {inference_id} Details:")
+            print("-" * 60)
+            print(f"Worker: {inference['worker']}")
+            print(f"Model ID: {inference['model_id']}")
+            print(f"Submitted: Block {inference['submitted_at']}")
+            print(f"Input Hash: {inference['input_hash'].hex()}")
+            print(f"Output Hash: {inference['output_hash'].hex()}")
+            print(f"Output:")
+            print(f"  {inference['output']}")
+            print("-" * 60)
+            
+        except Exception as e:
+            print(f"❌ Error showing inference details: {e}")
+    
+    async def validate_inference_interactive(self):
+        """Interactively validate a specific inference"""
+        try:
+            inference_id = input("\n✅ Enter inference ID to validate: ").strip()
+            if not inference_id.isdigit():
+                print("❌ Invalid inference ID")
+                return
+                
+            inference_id = int(inference_id)
+            
+            confirm = input(f"Confirm validation of inference {inference_id}? (y/N): ").strip().lower()
+            if confirm != 'y':
+                print("❌ Validation cancelled")
+                return
+            
+            success = await self.validate_inference(inference_id)
+            if success:
+                self.processed_inferences.add(inference_id)
+                print(f"✅ Inference {inference_id} validated successfully")
+            else:
+                print(f"❌ Failed to validate inference {inference_id}")
+            
+        except Exception as e:
+            print(f"❌ Error validating inference: {e}")
+    
+    async def challenge_inference_interactive(self):
+        """Interactively challenge a specific inference"""
+        try:
+            inference_id = input("\n❌ Enter inference ID to challenge: ").strip()
+            if not inference_id.isdigit():
+                print("❌ Invalid inference ID")
+                return
+                
+            inference_id = int(inference_id)
+            expected_output = input("Enter expected output for challenge: ").strip()
+            
+            if not expected_output:
+                print("❌ Expected output cannot be empty")
+                return
+            
+            confirm = input(f"Confirm challenge of inference {inference_id}? (y/N): ").strip().lower()
+            if confirm != 'y':
+                print("❌ Challenge cancelled")
+                return
+            
+            success = await self.challenge_inference(inference_id, expected_output)
+            if success:
+                self.processed_inferences.add(inference_id)
+                print(f"✅ Inference {inference_id} challenged successfully")
+            else:
+                print(f"❌ Failed to challenge inference {inference_id}")
+            
+        except Exception as e:
+            print(f"❌ Error challenging inference: {e}")
+    
+    async def show_validator_status(self):
+        """Show current validator status"""
+        try:
+            print(f"\n📊 Validator Status:")
+            print("-" * 50)
+            print(f"Address: {self.validator_address}")
+            print(f"Registered: {self.registered}")
+            print(f"Running: {self.running}")
+            print(f"Processed Count: {len(self.processed_inferences)}")
+            print(f"Chain Endpoint: {self.substrate.url}")
+            print(f"Ollama Endpoint: {self.ollama_endpoint}")
+            
             try:
                 current_block = self.substrate.get_block_number(None)
+                print(f"Current Block: {current_block}")
             except:
-                pass
-                
-            return {
-                "validator_address": self.validator_address,
-                "registered": self.registered,
-                "running": self.running,
-                "processed_count": len(self.processed_inferences),
-                "chain_endpoint": self.substrate.url,
-                "ollama_endpoint": self.ollama_endpoint,
-                "current_block": current_block
-            }
-        
-        @app.get("/pending")
-        async def pending_inferences_endpoint():
-            """Get all pending inferences"""
-            if not self.registered:
-                raise HTTPException(status_code=400, detail="Validator not registered")
+                print("Current Block: Unable to fetch")
             
-            try:
-                pending = await self.get_pending_inferences()
-                # Convert bytes to hex strings for JSON serialization
-                serializable_pending = []
-                for inference in pending:
-                    serializable_inference = inference.copy()
-                    serializable_inference['input_hash'] = inference['input_hash'].hex()
-                    serializable_inference['output_hash'] = inference['output_hash'].hex()
-                    serializable_pending.append(serializable_inference)
-                
-                return {
-                    "count": len(serializable_pending),
-                    "pending_inferences": serializable_pending
-                }
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error fetching pending inferences: {str(e)}")
-        
-        @app.post("/validate")
-        async def validate_endpoint(request: ValidateRequest):
-            """Manually validate a specific inference"""
-            if not self.registered:
-                raise HTTPException(status_code=400, detail="Validator not registered")
+            print("-" * 50)
             
-            success = await self.validate_inference(request.inference_id)
-            if success:
-                self.processed_inferences.add(request.inference_id)
-                return {"status": "success", "message": f"Inference {request.inference_id} validated"}
-            else:
-                raise HTTPException(status_code=500, detail="Validation failed")
-        
-        @app.post("/challenge")
-        async def challenge_endpoint(request: ChallengeRequest):
-            """Manually challenge a specific inference"""
-            if not self.registered:
-                raise HTTPException(status_code=400, detail="Validator not registered")
-            
-            success = await self.challenge_inference(request.inference_id, request.expected_output)
-            if success:
-                self.processed_inferences.add(request.inference_id)
-                return {"status": "success", "message": f"Inference {request.inference_id} challenged"}
-            else:
-                raise HTTPException(status_code=500, detail="Challenge failed")
-        
-        @app.post("/process")
-        async def process_pending_endpoint():
-            """Manually trigger processing of pending inferences"""
-            if not self.registered:
-                raise HTTPException(status_code=400, detail="Validator not registered")
-            
-            try:
-                await self.process_pending_inferences()
-                return {"status": "success", "message": "Pending inferences processed"}
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-        
-        @app.post("/register")
-        async def register_endpoint(request: RegisterRequest):
-            """Register the validator on-chain with optional stake amount"""
-            success = await self.register_validator(stake_amount=request.stake)
-            if success:
-                return {"status": "success", "message": "Validator registered", "stake": request.stake}
-            raise HTTPException(status_code=500, detail="Validator registration failed")
-        
-        @app.get("/models/{model_id}")
-        async def model_info_endpoint(model_id: int):
-            """Get information about a specific model"""
-            try:
-                model_info = await self.get_model_info(model_id)
-                if model_info:
-                    # Convert bytes to hex strings for JSON serialization
-                    serializable_model = model_info.copy()
-                    serializable_model['model_hash'] = model_info['model_hash'].hex()
-                    return serializable_model
-                else:
-                    raise HTTPException(status_code=404, detail="Model not found")
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error fetching model info: {str(e)}")
-        
-        print(f"🚀 Starting Validator API server on port {port}")
-        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
-        server = uvicorn.Server(config)
-        await server.serve()
+        except Exception as e:
+            print(f"❌ Error showing validator status: {e}")
     
+    async def refresh_validator_registration(self):
+        """Refresh validator registration"""
+        try:
+            print("🔄 Refreshing validator registration...")
+            success = await self.register_validator()
+            if success:
+                print("✅ Validator registration refreshed successfully")
+            else:
+                print("❌ Failed to refresh validator registration")
+        except Exception as e:
+            print(f"❌ Error refreshing registration: {e}")
+
     async def start_validation_loop(self, interval: int = 10):
         """Start the continuous validation loop"""
         print(f"🔄 Starting validation loop (interval: {interval}s)")
@@ -528,8 +591,7 @@ async def main():
     parser.add_argument('--seed', default='//Charlie', help='Validator account seed')
     parser.add_argument('--interval', type=int, default=10, help='Validation interval in seconds')
     parser.add_argument('--register', action='store_true', help='Register as validator (requires sudo)')
-    parser.add_argument('--port', type=int, default=8001, help='API server port')
-    parser.add_argument('--api-only', action='store_true', help='Run only API server without validation loop')
+    parser.add_argument('--auto-mode', action='store_true', help='Start in automatic validation mode (default: interactive)')
     
     args = parser.parse_args()
     
@@ -550,22 +612,14 @@ async def main():
             print("❌ Failed to register validator. Continuing anyway...")
     
     try:
-        if args.api_only:
-            # Run only API server
-            await validator.start_api_server(args.port)
+        if args.auto_mode:
+            print("🔄 Starting automatic validation mode...")
+            # Run validation loop
+            await validator.start_validation_loop(args.interval)
         else:
-            # Run both API server and validation loop concurrently
-            tasks = [
-                asyncio.create_task(validator.start_api_server(args.port)),
-                asyncio.create_task(validator.start_validation_loop(args.interval))
-            ]
-            
-            # Wait for any task to complete (shouldn't happen unless there's an error)
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            
-            # Cancel remaining tasks
-            for task in pending:
-                task.cancel()
+            print("🎮 Starting interactive mode (default)...")
+            # Run interactive mode
+            await validator.interactive_mode()
                 
     except KeyboardInterrupt:
         print("\n🛑 Received interrupt signal")
