@@ -16,34 +16,57 @@ import requests
 import time
 import asyncio
 import argparse
+import signal
+import sys
 from typing import Dict, Any, Optional, List
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
+from node_manager import NodeManager, create_worker_node_manager, get_auto_ports
 
 class OllamaWorker:
     def __init__(self, 
                  chain_endpoint: str = "ws://localhost:9944",
                  ollama_endpoint: str = "http://localhost:11434",
-                 worker_seed: str = "//Bob"):
+                 worker_seed: str = "//Bob",
+                 node_manager: Optional[NodeManager] = None):
         
-        self.substrate = SubstrateInterface(url=chain_endpoint)
+        self.chain_endpoint = chain_endpoint
+        self.substrate = None  # Will be initialized after node starts
         self.ollama_endpoint = ollama_endpoint
         self.keypair = Keypair.create_from_uri(worker_seed)
         self.worker_address = self.keypair.ss58_address
+        self.node_manager = node_manager
         
         print(f"Worker initialized with address: {self.worker_address}")
         print(f"Chain endpoint: {chain_endpoint}")
         print(f"Ollama endpoint: {ollama_endpoint}")
+        if self.node_manager:
+            print(f"Blockchain node: {self.node_manager.node_name}")
         
         # Worker state
         self.registered = False
         self.models = {}  # model_id -> model_info
         self.running = False
         self.queue_listener_running = False
+        self.submitted_inferences = {}  # Track submitted inferences by request_id
+    
+    async def initialize_chain_connection(self):
+        """Initialize connection to the blockchain"""
+        try:
+            print(f"🔗 Connecting to chain at: {self.chain_endpoint}")
+            self.substrate = SubstrateInterface(url=self.chain_endpoint)
+            return True
+        except Exception as e:
+            print(f"❌ Failed to connect to chain: {e}")
+            return False
     
     async def check_chain_connection(self):
         """Check if chain connection is healthy"""
         try:
+            if not self.substrate:
+                if not await self.initialize_chain_connection():
+                    return False
+            
             # Try to get the latest block
             latest_block = self.substrate.get_block_number(None)
             print(f"🔗 Chain connection healthy - Latest block: {latest_block}")
@@ -97,6 +120,81 @@ class OllamaWorker:
             print(f"❌ Error registering worker: {e}")
             return False
     
+    async def register_node_identity(self, peer_id: str, endpoint: str, node_type: int = 0):
+        """Register node identity for this worker"""
+        try:
+            # Convert peer_id string to bytes
+            peer_id_bytes = peer_id.encode('utf-8')[:64]  # Limit to 64 bytes
+            endpoint_bytes = endpoint.encode('utf-8')[:256]  # Limit to 256 bytes
+            
+            call = self.substrate.compose_call(
+                call_module='QxAi',
+                call_function='register_node_identity',
+                call_params={
+                    'peer_id': peer_id_bytes,
+                    'endpoint': endpoint_bytes,
+                    'node_type': node_type  # 0=Worker, 1=Validator, 2=WorkerValidator
+                }
+            )
+            
+            extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=self.keypair)
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            
+            if receipt.is_success:
+                print(f"✅ Node identity registered: {peer_id}")
+                print(f"   Endpoint: {endpoint}")
+                print(f"   Node type: {['Worker', 'Validator', 'WorkerValidator'][node_type]}")
+                return True
+            else:
+                print(f"❌ Node identity registration failed: {receipt.error_message}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error registering node identity: {e}")
+            return False
+    
+    async def check_node_slashed_status(self, peer_id: str) -> bool:
+        """Check if this node has been slashed"""
+        try:
+            peer_id_bytes = peer_id.encode('utf-8')[:64]
+            
+            # Query the SlashedNodes storage map
+            slashed_result = self.substrate.query(
+                module='QxAi',
+                storage_function='SlashedNodes',
+                params=[peer_id_bytes]
+            )
+            
+            if slashed_result and slashed_result.value:
+                return slashed_result.value
+            return False
+            
+        except Exception as e:
+            print(f"❌ Error checking slashed status: {e}")
+            return False
+    
+    async def get_node_identity(self) -> dict:
+        """Get node identity information for this worker"""
+        try:
+            identity_result = self.substrate.query(
+                module='QxAi',
+                storage_function='NodeIdentities',
+                params=[self.worker_address]
+            )
+            
+            if identity_result and identity_result.value:
+                identity = identity_result.value
+                return {
+                    'peer_id': bytes(identity['peer_id']).decode('utf-8', errors='ignore'),
+                    'endpoint': bytes(identity['endpoint']).decode('utf-8', errors='ignore'),
+                    'node_type': identity['node_type']
+                }
+            return {}
+            
+        except Exception as e:
+            print(f"❌ Error getting node identity: {e}")
+            return {}
+    
     async def register_model(self, model_name: str, ollama_model: str, endpoint: str, seed: int = 42, temperature: float = 0.7, max_tokens: int = 512):
         """Register a model on the chain with deterministic parameters"""
         try:
@@ -125,6 +223,10 @@ class OllamaWorker:
     async def run_inference(self, model_id: int, prompt: str) -> Optional[str]:
         """Run inference using Ollama with deterministic parameters"""
         try:
+            print(f"🔍 Checking for model ID {model_id}")
+            print(f"📋 Available models: {list(self.models.keys())}")
+            print(f"📋 Total models: {len(self.models)}")
+            
             if model_id not in self.models:
                 print(f"❌ Model ID {model_id} not found")
                 return None
@@ -213,6 +315,17 @@ class OllamaWorker:
                         print(f"✅ Request {request_id} completed and submitted to chain")
                         print(f"📦 Block: {block_hash}")
                         print(f"🧾 Transaction: {tx_hash}")
+                        
+                        # Track submitted inference
+                        current_block = self.substrate.get_block_number(None)
+                        self.submitted_inferences[request_id] = {
+                            'output_text': output_text,
+                            'submitted_at': current_block,
+                            'block_hash': block_hash,
+                            'tx_hash': tx_hash,
+                            'status': 'submitted'
+                        }
+                        
                         return True
                     else:
                         print(f"❌ Failed to submit inference: {receipt.error_message}")
@@ -256,6 +369,9 @@ class OllamaWorker:
     
     async def setup_zoo_model(self):
         """Setup a zoo assistant model with deterministic parameters"""
+        print("🔧 Setting up zoo assistant model...")
+        print(f"📋 Current models count: {len(self.models)}")
+        
         model_id = await self.register_model(
             model_name="zoo_assistant",
             ollama_model="gemma3:4b",  # Lightweight model for testing
@@ -268,6 +384,10 @@ class OllamaWorker:
         if model_id is not None:
             print(f"✅ Zoo assistant model setup complete (ID: {model_id})")
             print(f"💡 Model ready for deterministic inference requests")
+            print(f"📋 Total models registered: {len(self.models)}")
+            print(f"📋 Available models: {list(self.models.keys())}")
+        else:
+            print("❌ Failed to setup zoo model")
         
         return model_id
     
@@ -402,6 +522,16 @@ class OllamaWorker:
         try:
             while self.queue_listener_running:
                 try:
+                    # Check if node is slashed first
+                    node_identity = await self.get_node_identity()
+                    if node_identity and 'peer_id' in node_identity:
+                        is_slashed = await self.check_node_slashed_status(node_identity['peer_id'])
+                        if is_slashed:
+                            print("🔥 NODE HAS BEEN SLASHED! Stopping operations...")
+                            print("   This node can no longer participate in the network")
+                            self.queue_listener_running = False
+                            break
+                    
                     # Get queued requests
                     requests = await self.get_queue_requests()
                     
@@ -452,11 +582,12 @@ class OllamaWorker:
                 print("2. 🔍 Show detailed request info")
                 print("3. ⚡ Execute specific request")
                 print("4. 📊 Show worker status")
-                print("5. 🔄 Refresh worker status on chain")
-                print("6. 🚪 Exit interactive mode")
+                print("5. 📋 Monitor submitted inferences")
+                print("6. 🔄 Refresh worker status on chain")
+                print("7. 🚪 Exit interactive mode")
                 print("-" * 60)
                 
-                choice = input("Select option (1-6): ").strip()
+                choice = input("Select option (1-7): ").strip()
                 
                 if choice == "1":
                     await self.show_pending_requests()
@@ -467,12 +598,14 @@ class OllamaWorker:
                 elif choice == "4":
                     await self.show_worker_status()
                 elif choice == "5":
-                    await self.refresh_worker_status()
+                    await self.monitor_submitted_inferences()
                 elif choice == "6":
+                    await self.refresh_worker_status()
+                elif choice == "7":
                     print("🚪 Exiting interactive mode...")
                     break
                 else:
-                    print("❌ Invalid option. Please choose 1-6.")
+                    print("❌ Invalid option. Please choose 1-7.")
                     
         except KeyboardInterrupt:
             print("\n🛑 Interactive mode interrupted")
@@ -582,12 +715,28 @@ class OllamaWorker:
         """Show current worker status"""
         try:
             print(f"\n📊 Worker Status:")
-            print("-" * 40)
+            print("-" * 50)
             print(f"Address: {self.worker_address}")
             print(f"Registered: {self.registered}")
             print(f"Models: {list(self.models.keys())}")
             print(f"Queue Listener Running: {self.queue_listener_running}")
             print(f"Chain Endpoint: {self.substrate.url}")
+            
+            # Show blockchain node status
+            if self.node_manager:
+                node_info = self.node_manager.get_node_info()
+                node_status = await self.get_node_status()
+                print(f"Blockchain Node:")
+                print(f"  Name: {node_info['name']}")
+                print(f"  Running: {node_info['running']}")
+                print(f"  WS Endpoint: {node_info['ws_endpoint']}")
+                print(f"  HTTP Endpoint: {node_info['http_endpoint']}")
+                print(f"  Status: {node_status.get('status', 'unknown')}")
+                if 'health' in node_status:
+                    health = node_status['health']
+                    print(f"  Health: peers={health.get('peers', 0)}, syncing={health.get('isSyncing', False)}")
+            else:
+                print(f"Blockchain Node: Not managed (external)")
             
             # Check on-chain status
             worker_status = self.substrate.query('QxAi', 'WorkerStatus', [self.worker_address])
@@ -598,7 +747,39 @@ class OllamaWorker:
             queue_query = self.substrate.query('QxAi', 'WorkerQueues', [self.worker_address])
             queue_size = len(queue_query.value) if queue_query and queue_query.value else 0
             print(f"Queue Size: {queue_size} requests")
-            print("-" * 40)
+            
+            # Show submitted inferences count
+            print(f"Submitted Inferences: {len(self.submitted_inferences)}")
+            
+            # Show node identity info
+            node_identity = await self.get_node_identity()
+            if node_identity:
+                print(f"Node Identity:")
+                print(f"  Peer ID: {node_identity.get('peer_id', 'Not set')}")
+                print(f"  Endpoint: {node_identity.get('endpoint', 'Not set')}")
+                print(f"  Type: {['Worker', 'Validator', 'WorkerValidator'][node_identity.get('node_type', 0)]}")
+                
+                # Check if slashed
+                if 'peer_id' in node_identity:
+                    is_slashed = await self.check_node_slashed_status(node_identity['peer_id'])
+                    if is_slashed:
+                        print(f"  ⚠️  STATUS: 🔥 SLASHED")
+                    else:
+                        print(f"  ✅ STATUS: Active")
+            else:
+                print("Node Identity: Not registered")
+            
+            # Check for challenges
+            challenged_count = 0
+            for request_id in self.submitted_inferences:
+                challenges = await self.get_inference_challenges_by_request(request_id)
+                if challenges:
+                    challenged_count += 1
+            
+            if challenged_count > 0:
+                print(f"⚠️  Challenged Inferences: {challenged_count}")
+            
+            print("-" * 50)
             
         except Exception as e:
             print(f"❌ Error showing worker status: {e}")
@@ -615,9 +796,229 @@ class OllamaWorker:
         except Exception as e:
             print(f"❌ Error refreshing status: {e}")
     
+    async def get_inference_challenges_by_request(self, request_id: int) -> List[Dict]:
+        """Get challenges for an inference by request ID"""
+        try:
+            # Reconnect if needed
+            try:
+                self.substrate.get_block_number(None)
+            except:
+                chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                self.substrate = SubstrateInterface(url=chain_url)
+            
+            # First find the inference ID for this request
+            inference_results = self.substrate.query_map('QxAi', 'InferenceResults')
+            inference_id = None
+            
+            for inf_id, result in inference_results:
+                if result.value and result.value['request_id'] == request_id:
+                    inference_id = inf_id.value
+                    break
+            
+            if inference_id is None:
+                return []
+            
+            # Get challenges for this inference
+            challenges_result = self.substrate.query(
+                module='QxAi',
+                storage_function='InferenceChallenges',
+                params=[inference_id]
+            )
+            
+            if challenges_result and challenges_result.value:
+                challenges = []
+                for challenge_data in challenges_result.value:
+                    expected_output = bytes(challenge_data['expected_output']).decode('utf-8', errors='ignore')
+                    challenges.append({
+                        'validator': challenge_data['validator'],
+                        'expected_output': expected_output,
+                        'submitted_at': challenge_data['submitted_at']
+                    })
+                return challenges
+            return []
+            
+        except Exception as e:
+            if "not found" not in str(e):
+                print(f"❌ Error getting challenges: {e}")
+            return []
+    
+    async def get_inference_status_by_request(self, request_id: int) -> Optional[Dict]:
+        """Get inference status by request ID"""
+        try:
+            # Reconnect if needed
+            try:
+                self.substrate.get_block_number(None)
+            except:
+                chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                self.substrate = SubstrateInterface(url=chain_url)
+            
+            # Find the inference for this request
+            inference_results = self.substrate.query_map('QxAi', 'InferenceResults')
+            
+            for inf_id, result in inference_results:
+                if result.value and result.value['request_id'] == request_id:
+                    inference_data = result.value
+                    status = inference_data['status']
+                    
+                    # Handle status enum
+                    if isinstance(status, dict):
+                        status_key = list(status.keys())[0] if status else 'Unknown'
+                    else:
+                        status_key = str(status)
+                    
+                    return {
+                        'inference_id': inf_id.value,
+                        'status': status_key,
+                        'worker': inference_data['worker'],
+                        'output': bytes(inference_data['output']).decode('utf-8', errors='ignore'),
+                        'submitted_at': inference_data['submitted_at']
+                    }
+            return None
+            
+        except Exception as e:
+            if "not found" not in str(e):
+                print(f"❌ Error getting inference status: {e}")
+            return None
+    
+    async def monitor_submitted_inferences(self):
+        """Monitor status of submitted inferences"""
+        try:
+            if not self.submitted_inferences:
+                print("\n📭 No submitted inferences to monitor")
+                return
+            
+            print(f"\n📋 Monitoring {len(self.submitted_inferences)} submitted inferences:")
+            print("-" * 100)
+            print(f"{'Req ID':<8} {'Status':<12} {'Challenges':<12} {'Submitted':<12} {'Output Preview'}")
+            print("-" * 100)
+            
+            for request_id, submission_info in self.submitted_inferences.items():
+                # Get current status from chain
+                status_info = await self.get_inference_status_by_request(request_id)
+                current_status = status_info['status'] if status_info else 'Unknown'
+                
+                # Get challenges
+                challenges = await self.get_inference_challenges_by_request(request_id)
+                challenge_count = len(challenges)
+                
+                # Show preview of output
+                output_preview = submission_info['output_text'][:40] + "..." if len(submission_info['output_text']) > 40 else submission_info['output_text']
+                
+                # Status icon
+                status_icon = {
+                    'Pending': '⏳',
+                    'Challenged': '⚠️',
+                    'Validated': '✅',
+                    'Slashed': '🔥',
+                    'Unknown': '❓'
+                }.get(current_status, '❓')
+                
+                challenge_str = f"{challenge_count} chal." if challenge_count > 0 else "None"
+                
+                print(f"{request_id:<8} {status_icon} {current_status:<10} {challenge_str:<12} Block {submission_info['submitted_at']:<8} {output_preview}")
+                
+                # Show challenge details if any
+                if challenges:
+                    print(f"         📋 Challenge details:")
+                    for i, challenge in enumerate(challenges[:3], 1):  # Show max 3 challenges
+                        validator_short = challenge['validator'][:30] + "..." if len(challenge['validator']) > 30 else challenge['validator']
+                        expected_preview = challenge['expected_output'][:50] + "..." if len(challenge['expected_output']) > 50 else challenge['expected_output']
+                        print(f"         {i}. {validator_short}: '{expected_preview}'")
+                    
+                    if len(challenges) > 3:
+                        print(f"         ... and {len(challenges) - 3} more challenges")
+            
+            print("-" * 100)
+            
+            # Summary
+            status_counts = {}
+            challenged_count = 0
+            for request_id in self.submitted_inferences:
+                status_info = await self.get_inference_status_by_request(request_id)
+                status = status_info['status'] if status_info else 'Unknown'
+                status_counts[status] = status_counts.get(status, 0) + 1
+                
+                challenges = await self.get_inference_challenges_by_request(request_id)
+                if challenges:
+                    challenged_count += 1
+            
+            print(f"\n📊 Summary:")
+            for status, count in status_counts.items():
+                icon = {'Pending': '⏳', 'Challenged': '⚠️', 'Validated': '✅', 'Slashed': '🔥', 'Unknown': '❓'}.get(status, '❓')
+                print(f"   {icon} {status}: {count}")
+            
+            if challenged_count > 0:
+                print(f"   ⚠️  Total with challenges: {challenged_count}")
+            
+        except Exception as e:
+            print(f"❌ Error monitoring submitted inferences: {e}")
+    
     def stop_queue_listener(self):
         """Stop the queue listener"""
         self.queue_listener_running = False
+    
+    async def start_node(self) -> bool:
+        """Start the blockchain node"""
+        if not self.node_manager:
+            print("⚠️ No node manager configured")
+            return True  # Continue without node
+        
+        print(f"🚀 Starting blockchain node for worker...")
+        success = await self.node_manager.start_node()
+        
+        if success:
+            # Get the peer ID and register node identity
+            await asyncio.sleep(2)  # Wait for node to fully start
+            peer_id = self.node_manager.get_peer_id()
+            if peer_id:
+                print(f"🔗 Auto-registering node identity with peer ID: {peer_id}")
+                node_info = self.node_manager.get_node_info()
+                await self.register_node_identity(
+                    peer_id, 
+                    node_info['ws_endpoint'], 
+                    0  # Worker type
+                )
+        
+        return success
+    
+    async def stop_node(self):
+        """Stop the blockchain node"""
+        if self.node_manager:
+            print(f"🛑 Stopping blockchain node...")
+            await self.node_manager.stop_node()
+    
+    async def get_node_status(self) -> Dict[str, Any]:
+        """Get node status"""
+        if not self.node_manager:
+            return {"status": "no_node_manager"}
+        
+        return await self.node_manager.get_node_status()
+    
+    def setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown"""
+        def signal_handler(signum, frame):
+            print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+            asyncio.create_task(self.shutdown())
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    
+    async def shutdown(self):
+        """Graceful shutdown of worker and node"""
+        print("🛑 Shutting down worker and node...")
+        
+        # Stop queue listener
+        self.stop_queue_listener()
+        
+        # Set worker offline
+        if self.registered:
+            await self.update_worker_status(False)
+        
+        # Stop blockchain node
+        await self.stop_node()
+        
+        print("✅ Shutdown complete")
+        sys.exit(0)
 
 async def main():
     print("🌟 QX Chain Ollama Worker Starting...")
@@ -628,49 +1029,100 @@ async def main():
     parser.add_argument('--seed', default='//Bob', help='Worker account seed')
     parser.add_argument('--setup-zoo', action='store_true', help='Setup zoo assistant model')
     parser.add_argument('--interactive', action='store_true', help='Start in interactive mode')
+    parser.add_argument('--peer-id', default=None, help='Node peer ID for blockchain network (deprecated, auto-generated)')
+    parser.add_argument('--node-endpoint', default='http://localhost:9944', help='Node endpoint (deprecated, auto-managed)')
+    parser.add_argument('--start-node', action='store_true', help='Start blockchain node with worker (default: True)')
+    parser.add_argument('--no-node', action='store_true', help='Don\'t start blockchain node (use external node)')
+    parser.add_argument('--node-name', default=None, help='Custom blockchain node name')
     
     args = parser.parse_args()
+    
+    # Setup node manager unless explicitly disabled
+    node_manager = None
+    if not args.no_node:
+        # Get auto-assigned ports to avoid conflicts
+        ws_port, http_port, p2p_port = get_auto_ports(9944)
+        
+        # Create node name
+        node_name = args.node_name or f"worker_{args.seed.replace('//', '').replace('/', '_')}"
+        
+        # Create node manager
+        node_manager = NodeManager(
+            node_name=node_name,
+            ws_port=ws_port,
+            http_port=http_port,
+            p2p_port=p2p_port,
+            consensus="instant-seal"
+        )
+        
+        print(f"🔧 Will start blockchain node: {node_name}")
+        print(f"   Ports: WS={ws_port}, HTTP={http_port}, P2P={p2p_port}")
+        
+        # Update chain endpoint to use our node
+        args.chain = f"ws://localhost:{ws_port}"
     
     # Initialize worker
     worker = OllamaWorker(
         chain_endpoint=args.chain,
         ollama_endpoint=args.ollama,
-        worker_seed=args.seed
+        worker_seed=args.seed,
+        node_manager=node_manager
     )
     
-    # Check chain connection first
-    if not await worker.check_chain_connection():
-        print("❌ Chain connection failed. Please ensure the chain is running.")
-        return
+    # Setup signal handlers for graceful shutdown
+    worker.setup_signal_handlers()
     
-    # Register worker and setup models BEFORE starting servers
-    if not await worker.register_worker():
-        print("❌ Failed to register worker. Exiting.")
-        return
-    
-    if args.setup_zoo:
-        await worker.setup_zoo_model()
-    
-    print("✅ Worker initialization complete!")
-    
-    if args.interactive:
-        print("🎮 Starting interactive mode...")
-        try:
-            await worker.interactive_mode()
-        except KeyboardInterrupt:
-            print("\n🛑 Shutting down worker...")
-    else:
-        print("🎧 Starting queue listener...")
+    try:
+        # Start blockchain node first if managed
+        if node_manager:
+            if not await worker.start_node():
+                print("❌ Failed to start blockchain node. Exiting.")
+                return
         
-        # Start queue listener
-        try:
-            await worker.queue_listener()
-        except KeyboardInterrupt:
-            print("\n🛑 Shutting down worker...")
-            worker.stop_queue_listener()
-        except Exception as e:
-            print(f"❌ Worker error: {e}")
-            worker.stop_queue_listener()
+        # Check chain connection
+        if not await worker.check_chain_connection():
+            print("❌ Chain connection failed. Please ensure the chain is running.")
+            return
+        
+        # Register worker and setup models BEFORE starting servers
+        if not await worker.register_worker():
+            print("❌ Failed to register worker. Exiting.")
+            return
+        
+        if args.setup_zoo:
+            await worker.setup_zoo_model()
+        
+        # Register node identity if peer_id provided (legacy support)
+        if args.peer_id:
+            print(f"🔗 Registering node identity...")
+            await worker.register_node_identity(args.peer_id, args.node_endpoint, 0)  # 0 = Worker type
+        
+        print("✅ Worker initialization complete!")
+        
+        if args.interactive:
+            print("🎮 Starting interactive mode...")
+            try:
+                await worker.interactive_mode()
+            except KeyboardInterrupt:
+                print("\n🛑 Shutting down worker...")
+        else:
+            print("🎧 Starting queue listener...")
+            
+            # Start queue listener
+            try:
+                await worker.queue_listener()
+            except KeyboardInterrupt:
+                print("\n🛑 Shutting down worker...")
+                worker.stop_queue_listener()
+            except Exception as e:
+                print(f"❌ Worker error: {e}")
+                worker.stop_queue_listener()
+                
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+    finally:
+        # Ensure cleanup
+        await worker.shutdown()
 
 if __name__ == "__main__":
     print("📋 Starting main function...")

@@ -14,7 +14,6 @@ Comprehensive scripts for setting up and running the QX Chain opML environment w
 - **`check_dependencies.sh`** - Install Rust, Python, Ollama
 - **`setup_ollama.sh`** - Setup Ollama service and models
 - **`build_chain.sh`** - Build the QX Chain node
-- **`test_setup.sh`** - Test all components
 
 ## 🚦 Service Scripts (Run in Separate Terminals)
 
@@ -72,17 +71,6 @@ Press `Ctrl+C` in each terminal
 - View inference results in real-time
 - User-friendly menu navigation
 
-### Option 2: Automated Testing
-```bash
-# Test inference pipeline
-python test_inference.py
-
-# Or test manually with curl
-curl -X POST http://localhost:8000/inference \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello", "model_id": 0}'
-```
-
 ### Customer Interface Commands
 The interactive customer interface provides:
 1. **List Workers** - View all registered workers, their online status, and queue lengths
@@ -99,9 +87,7 @@ The interactive customer interface provides:
 - **`customer.py`** - Interactive customer interface for request submission
 
 ### Testing & Utilities
-- **`test_inference.py`** - Automated testing of inference pipeline
 - **`check_account.py`** - Check account balances and status
-- **`temp_check.py`** - Temporary diagnostic utilities
 
 ### Configuration
 - **`requirements.txt`** - Python package dependencies
@@ -139,4 +125,3 @@ All scripts show logs in terminal for real-time monitoring while also saving to 
 - Each service uses different test accounts (Alice, Bob, Charlie, etc.)
 - Workers need 1,000+ tokens for staking
 - Validators need 100+ tokens for staking
-- Check balances with `python check_account.py`

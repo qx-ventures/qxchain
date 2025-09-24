@@ -15,33 +15,57 @@ import requests
 import time
 import asyncio
 import argparse
+import signal
+import sys
 from typing import Dict, Any, Optional, List
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
+from node_manager import NodeManager, create_validator_node_manager, get_auto_ports
 
 class QXValidator:
     def __init__(self, 
                  chain_endpoint: str = "ws://localhost:9944",
                  ollama_endpoint: str = "http://localhost:11434",
-                 validator_seed: str = "//Charlie"):
+                 validator_seed: str = "//Charlie",
+                 node_manager: Optional[NodeManager] = None):
         
-        self.substrate = SubstrateInterface(url=chain_endpoint)
+        self.chain_endpoint = chain_endpoint
+        self.substrate = None  # Will be initialized after node starts
         self.ollama_endpoint = ollama_endpoint
         self.keypair = Keypair.create_from_uri(validator_seed)
         self.validator_address = self.keypair.ss58_address
+        self.node_manager = node_manager
         
         print(f"Validator initialized with address: {self.validator_address}")
         print(f"Chain endpoint: {chain_endpoint}")
         print(f"Ollama endpoint: {ollama_endpoint}")
+        if self.node_manager:
+            print(f"Blockchain node: {self.node_manager.node_name}")
         
         # Validator state
         self.registered = False
         self.running = False
         self.processed_inferences = set()  # Track processed inference IDs
+    
+    async def initialize_chain_connection(self):
+        """Initialize connection to the blockchain"""
+        try:
+            print(f"🔗 Connecting to chain at: {self.chain_endpoint}")
+            self.substrate = SubstrateInterface(url=self.chain_endpoint)
+            return True
+        except Exception as e:
+            print(f"❌ Failed to connect to chain: {e}")
+            return False
+    
+    def _ensure_substrate_connection(self):
+        """Ensure substrate connection is initialized"""
+        if self.substrate is None:
+            raise RuntimeError("Substrate connection not initialized. Call initialize_chain_connection() first.")
         
     async def register_validator(self, stake_amount: int = 1000):
         """Register this node as a validator (requires sudo/governance)"""
         try:
+            self._ensure_substrate_connection()
             call = self.substrate.compose_call(
                 call_module='QxAi',
                 call_function='register_validator',
@@ -86,6 +110,82 @@ class QXValidator:
             print(f"❌ Error registering validator: {e}")
             return False
     
+    async def register_node_identity(self, peer_id: str, endpoint: str, node_type: int = 1):
+        """Register node identity for this validator"""
+        try:
+            self._ensure_substrate_connection()
+            # Convert peer_id string to bytes
+            peer_id_bytes = peer_id.encode('utf-8')[:64]  # Limit to 64 bytes
+            endpoint_bytes = endpoint.encode('utf-8')[:256]  # Limit to 256 bytes
+            
+            call = self.substrate.compose_call(
+                call_module='QxAi',
+                call_function='register_node_identity',
+                call_params={
+                    'peer_id': peer_id_bytes,
+                    'endpoint': endpoint_bytes,
+                    'node_type': node_type  # 0=Worker, 1=Validator, 2=WorkerValidator
+                }
+            )
+            
+            extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=self.keypair)
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            
+            if receipt.is_success:
+                print(f"✅ Node identity registered: {peer_id}")
+                print(f"   Endpoint: {endpoint}")
+                print(f"   Node type: {['Worker', 'Validator', 'WorkerValidator'][node_type]}")
+                return True
+            else:
+                print(f"❌ Node identity registration failed: {receipt.error_message}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error registering node identity: {e}")
+            return False
+    
+    async def check_node_slashed_status(self, peer_id: str) -> bool:
+        """Check if this node has been slashed"""
+        try:
+            peer_id_bytes = peer_id.encode('utf-8')[:64]
+            
+            # Query the SlashedNodes storage map
+            slashed_result = self.substrate.query(
+                module='QxAi',
+                storage_function='SlashedNodes',
+                params=[peer_id_bytes]
+            )
+            
+            if slashed_result and slashed_result.value:
+                return slashed_result.value
+            return False
+            
+        except Exception as e:
+            print(f"❌ Error checking slashed status: {e}")
+            return False
+    
+    async def get_node_identity(self) -> dict:
+        """Get node identity information for this validator"""
+        try:
+            identity_result = self.substrate.query(
+                module='QxAi',
+                storage_function='NodeIdentities',
+                params=[self.validator_address]
+            )
+            
+            if identity_result and identity_result.value:
+                identity = identity_result.value
+                return {
+                    'peer_id': bytes(identity['peer_id']).decode('utf-8', errors='ignore'),
+                    'endpoint': bytes(identity['endpoint']).decode('utf-8', errors='ignore'),
+                    'node_type': identity['node_type']
+                }
+            return {}
+            
+        except Exception as e:
+            print(f"❌ Error getting node identity: {e}")
+            return {}
+    
     async def get_pending_inferences(self) -> List[Dict]:
         """Get all pending inferences from the chain"""
         try:
@@ -107,23 +207,41 @@ class QXValidator:
                     start_id = max(0, next_id - 100)
                     
                     for inference_id in range(start_id, next_id):
-                        inference_result = self.substrate.query(
-                            module='QxAi',
-                            storage_function='Inferences',
-                            params=[inference_id]
-                        )
+                        try:
+                            inference_result = self.substrate.query(
+                                module='QxAi',
+                                storage_function='InferenceResults',
+                                params=[inference_id]
+                            )
+                        except Exception as query_error:
+                            if "not found" in str(query_error) or "encoding" in str(query_error):
+                                continue
+                            else:
+                                raise query_error
                         
                         if inference_result and inference_result.value:
                             inference = inference_result.value
-                            if inference['status'] == 'Pending':
+                            status = inference['status']
+                            
+                            # Handle status enum
+                            if isinstance(status, dict):
+                                status_key = list(status.keys())[0] if status else 'Unknown'
+                            else:
+                                status_key = str(status)
+                            
+                            if status_key in ['Pending', 'Challenged']:
+                                # Get challenge information
+                                challenges = await self.get_inference_challenges(inference_id)
+                                
                                 pending_inferences.append({
                                     'id': inference_id,
                                     'worker': inference['worker'],
-                                    'model_id': inference['model_id'],
-                                    'input_hash': bytes(inference['input_hash']),
-                                    'output_hash': bytes(inference['output_hash']),
+                                    'request_id': inference['request_id'],
                                     'output': bytes(inference['output']).decode('utf-8', errors='ignore'),
-                                    'submitted_at': inference['submitted_at']
+                                    'status': status_key,
+                                    'submitted_at': inference['submitted_at'],
+                                    'challenges': challenges,
+                                    'challenge_count': len(challenges)
                                 })
                 
             except Exception as storage_error:
@@ -138,6 +256,68 @@ class QXValidator:
         except Exception as e:
             print(f"❌ Error getting pending inferences: {e}")
             return []
+    
+    async def get_inference_challenges(self, inference_id: int) -> List[Dict]:
+        """Get challenges for a specific inference"""
+        try:
+            challenges_result = self.substrate.query(
+                module='QxAi',
+                storage_function='InferenceChallenges',
+                params=[inference_id]
+            )
+            
+            if challenges_result and challenges_result.value:
+                challenges = []
+                for challenge_data in challenges_result.value:
+                    expected_output = bytes(challenge_data['expected_output']).decode('utf-8', errors='ignore')
+                    challenges.append({
+                        'validator': challenge_data['validator'],
+                        'expected_output': expected_output,
+                        'submitted_at': challenge_data['submitted_at']
+                    })
+                return challenges
+            return []
+            
+        except Exception as e:
+            if "not found" not in str(e):
+                print(f"❌ Error getting challenges: {e}")
+            return []
+    
+    async def get_validator_count(self) -> int:
+        """Get total number of registered validators"""
+        try:
+            validators_result = self.substrate.query_map('QxAi', 'Validators')
+            return len(list(validators_result))
+        except Exception as e:
+            if "not found" not in str(e):
+                print(f"❌ Error getting validator count: {e}")
+            return 0
+    
+    async def check_challenge_consensus(self, inference_id: int, challenges: List[Dict]) -> Dict:
+        """Check if challenge consensus is reached for an inference"""
+        total_validators = await self.get_validator_count()
+        if total_validators == 0:
+            return {'consensus_reached': False, 'required': 0, 'actual': 0}
+        
+        # Group challenges by expected output
+        output_groups = {}
+        for challenge in challenges:
+            output = challenge['expected_output']
+            if output not in output_groups:
+                output_groups[output] = []
+            output_groups[output].append(challenge)
+        
+        # Find the group with the most validators
+        max_group_size = max(len(group) for group in output_groups.values()) if output_groups else 0
+        required_consensus = (total_validators * 2 + 2) // 3  # Ceiling of 2/3
+        
+        return {
+            'consensus_reached': max_group_size >= required_consensus,
+            'required': required_consensus,
+            'actual': max_group_size,
+            'total_validators': total_validators,
+            'output_groups': {output: len(group) for output, group in output_groups.items()}
+        }
     
     async def get_model_info(self, model_id: int) -> Optional[Dict]:
         """Get model information from the chain"""
@@ -299,7 +479,7 @@ class QXValidator:
                 call_function='challenge_inference',
                 call_params={
                     'inference_id': inference_id,
-                    'expected_output': list(expected_output.encode()[:1024])
+                    'expected_output': expected_output.encode()[:4096]  # Use bytes directly, not list
                 }
             )
             
@@ -320,6 +500,16 @@ class QXValidator:
     async def process_pending_inferences(self):
         """Main validation loop"""
         try:
+            # Check if this validator node is slashed first
+            node_identity = await self.get_node_identity()
+            if node_identity and 'peer_id' in node_identity:
+                is_slashed = await self.check_node_slashed_status(node_identity['peer_id'])
+                if is_slashed:
+                    print("🔥 VALIDATOR NODE HAS BEEN SLASHED! Stopping validation...")
+                    print("   This node can no longer participate in validation")
+                    self.running = False
+                    return
+            
             pending_inferences = await self.get_pending_inferences()
             
             if not pending_inferences:
@@ -335,7 +525,12 @@ class QXValidator:
                 if inference_id in self.processed_inferences:
                     continue
                 
-                print(f"🔍 Validating inference {inference_id}")
+                print(f"🔍 Validating inference {inference_id} (Status: {inference['status']})")
+                
+                # Show challenge status if any
+                if inference['challenge_count'] > 0:
+                    consensus_info = await self.check_challenge_consensus(inference_id, inference['challenges'])
+                    print(f"   ⚖️ Challenges: {inference['challenge_count']}, Consensus: {consensus_info['actual']}/{consensus_info['required']} ({'✅' if consensus_info['consensus_reached'] else '❌'})")
                 
                 # Get model info
                 model_info = await self.get_model_info(inference['model_id'])
@@ -387,12 +582,13 @@ class QXValidator:
                 print("3. ✅ Validate specific inference")
                 print("4. ❌ Challenge specific inference")
                 print("5. 🔄 Process all pending inferences")
-                print("6. 📊 Show validator status")
-                print("7. 🔄 Refresh validator registration")
-                print("8. 🚪 Exit interactive mode")
+                print("6. ⚖️ Show challenge consensus status")
+                print("7. 📊 Show validator status")
+                print("8. 🔄 Refresh validator registration")
+                print("9. 🚪 Exit interactive mode")
                 print("-" * 60)
                 
-                choice = input("Select option (1-8): ").strip()
+                choice = input("Select option (1-9): ").strip()
                 
                 if choice == "1":
                     await self.show_pending_inferences()
@@ -405,14 +601,16 @@ class QXValidator:
                 elif choice == "5":
                     await self.process_pending_inferences()
                 elif choice == "6":
-                    await self.show_validator_status()
+                    await self.show_challenge_consensus_status()
                 elif choice == "7":
-                    await self.refresh_validator_registration()
+                    await self.show_validator_status()
                 elif choice == "8":
+                    await self.refresh_validator_registration()
+                elif choice == "9":
                     print("🚪 Exiting interactive mode...")
                     break
                 else:
-                    print("❌ Invalid option. Please choose 1-8.")
+                    print("❌ Invalid option. Please choose 1-9.")
                     
         except KeyboardInterrupt:
             print("\n🛑 Interactive mode interrupted")
@@ -432,16 +630,22 @@ class QXValidator:
                 return
             
             print(f"\n📋 Found {len(pending)} pending inferences:")
-            print("-" * 100)
-            print(f"{'ID':<4} {'Worker':<50} {'Model':<6} {'Submitted':<10} {'Output Preview'}")
-            print("-" * 100)
+            print("-" * 120)
+            print(f"{'ID':<4} {'Worker':<30} {'Status':<10} {'Challenges':<12} {'Consensus':<10} {'Submitted':<10} {'Output Preview'}")
+            print("-" * 120)
             
             for inference in pending:
-                worker_short = inference['worker'][:47] + "..." if len(inference['worker']) > 50 else inference['worker']
-                output_preview = inference['output'][:30] + "..." if len(inference['output']) > 30 else inference['output']
-                print(f"{inference['id']:<4} {worker_short:<50} {inference['model_id']:<6} {inference['submitted_at']:<10} {output_preview}")
+                worker_short = inference['worker'][:27] + "..." if len(inference['worker']) > 30 else inference['worker']
+                output_preview = inference['output'][:25] + "..." if len(inference['output']) > 25 else inference['output']
+                
+                # Get consensus info
+                consensus_info = await self.check_challenge_consensus(inference['id'], inference['challenges'])
+                consensus_str = f"{consensus_info['actual']}/{consensus_info['required']}"
+                consensus_status = "✅" if consensus_info['consensus_reached'] else "❌" if inference['challenge_count'] > 0 else "-"
+                
+                print(f"{inference['id']:<4} {worker_short:<30} {inference['status']:<10} {inference['challenge_count']:<12} {consensus_str:<6}{consensus_status:<4} {inference['submitted_at']:<10} {output_preview}")
             
-            print("-" * 100)
+            print("-" * 120)
             
         except Exception as e:
             print(f"❌ Error showing pending inferences: {e}")
@@ -463,15 +667,29 @@ class QXValidator:
                 return
             
             print(f"\n📄 Inference {inference_id} Details:")
-            print("-" * 60)
+            print("-" * 80)
             print(f"Worker: {inference['worker']}")
-            print(f"Model ID: {inference['model_id']}")
+            print(f"Request ID: {inference.get('request_id', 'N/A')}")
+            print(f"Status: {inference['status']}")
             print(f"Submitted: Block {inference['submitted_at']}")
-            print(f"Input Hash: {inference['input_hash'].hex()}")
-            print(f"Output Hash: {inference['output_hash'].hex()}")
-            print(f"Output:")
+            print(f"Challenge Count: {inference['challenge_count']}")
+            
+            if inference['challenge_count'] > 0:
+                consensus_info = await self.check_challenge_consensus(inference_id, inference['challenges'])
+                print(f"Consensus Status: {consensus_info['actual']}/{consensus_info['required']} ({'✅ Reached' if consensus_info['consensus_reached'] else '❌ Not reached'})")
+                print(f"Total Validators: {consensus_info['total_validators']}")
+                
+                print("\nChallenges:")
+                for i, challenge in enumerate(inference['challenges'], 1):
+                    validator_short = challenge['validator'][:40] + "..." if len(challenge['validator']) > 40 else challenge['validator']
+                    expected_preview = challenge['expected_output'][:50] + "..." if len(challenge['expected_output']) > 50 else challenge['expected_output']
+                    print(f"  {i}. Validator: {validator_short}")
+                    print(f"     Expected: {expected_preview}")
+                    print(f"     Submitted: Block {challenge['submitted_at']}")
+            
+            print(f"\nActual Output:")
             print(f"  {inference['output']}")
-            print("-" * 60)
+            print("-" * 80)
             
         except Exception as e:
             print(f"❌ Error showing inference details: {e}")
@@ -543,6 +761,40 @@ class QXValidator:
             print(f"Chain Endpoint: {self.substrate.url}")
             print(f"Ollama Endpoint: {self.ollama_endpoint}")
             
+            # Show blockchain node status
+            if self.node_manager:
+                node_info = self.node_manager.get_node_info()
+                node_status = await self.get_node_status()
+                print(f"Blockchain Node:")
+                print(f"  Name: {node_info['name']}")
+                print(f"  Running: {node_info['running']}")
+                print(f"  WS Endpoint: {node_info['ws_endpoint']}")
+                print(f"  HTTP Endpoint: {node_info['http_endpoint']}")
+                print(f"  Status: {node_status.get('status', 'unknown')}")
+                if 'health' in node_status:
+                    health = node_status['health']
+                    print(f"  Health: peers={health.get('peers', 0)}, syncing={health.get('isSyncing', False)}")
+            else:
+                print(f"Blockchain Node: Not managed (external)")
+            
+            # Show node identity info
+            node_identity = await self.get_node_identity()
+            if node_identity:
+                print(f"Node Identity:")
+                print(f"  Peer ID: {node_identity.get('peer_id', 'Not set')}")
+                print(f"  Endpoint: {node_identity.get('endpoint', 'Not set')}")
+                print(f"  Type: {['Worker', 'Validator', 'WorkerValidator'][node_identity.get('node_type', 1)]}")
+                
+                # Check if slashed
+                if 'peer_id' in node_identity:
+                    is_slashed = await self.check_node_slashed_status(node_identity['peer_id'])
+                    if is_slashed:
+                        print(f"  ⚠️  STATUS: 🔥 SLASHED")
+                    else:
+                        print(f"  ✅ STATUS: Active")
+            else:
+                print("Node Identity: Not registered")
+            
             try:
                 current_block = self.substrate.get_block_number(None)
                 print(f"Current Block: {current_block}")
@@ -565,6 +817,52 @@ class QXValidator:
                 print("❌ Failed to refresh validator registration")
         except Exception as e:
             print(f"❌ Error refreshing registration: {e}")
+    
+    async def show_challenge_consensus_status(self):
+        """Show challenge consensus status for all inferences"""
+        try:
+            print("\n⚖️ Challenge Consensus Status:")
+            print("-" * 80)
+            
+            pending = await self.get_pending_inferences()
+            total_validators = await self.get_validator_count()
+            
+            print(f"Total Registered Validators: {total_validators}")
+            required_consensus = (total_validators * 2 + 2) // 3 if total_validators > 0 else 0
+            print(f"Required for Consensus: {required_consensus} validators")
+            print()
+            
+            challenged_inferences = [inf for inf in pending if inf['challenge_count'] > 0]
+            
+            if not challenged_inferences:
+                print("📭 No challenged inferences found")
+                return
+            
+            print(f"Found {len(challenged_inferences)} challenged inferences:")
+            print("-" * 80)
+            
+            for inference in challenged_inferences:
+                consensus_info = await self.check_challenge_consensus(inference['id'], inference['challenges'])
+                status_icon = "🔥" if consensus_info['consensus_reached'] else "⏳"
+                
+                print(f"{status_icon} Inference {inference['id']}:")
+                print(f"   Worker: {inference['worker'][:50]}..." if len(inference['worker']) > 50 else f"   Worker: {inference['worker']}")
+                print(f"   Status: {inference['status']}")
+                print(f"   Challenges: {inference['challenge_count']} total")
+                print(f"   Consensus: {consensus_info['actual']}/{consensus_info['required']} ({'✅ REACHED' if consensus_info['consensus_reached'] else '❌ Not reached'})")
+                
+                if consensus_info['output_groups']:
+                    print("   Challenge breakdown:")
+                    for output_preview, count in consensus_info['output_groups'].items():
+                        preview = output_preview[:40] + "..." if len(output_preview) > 40 else output_preview
+                        print(f"     - '{preview}': {count} validator(s)")
+                
+                print()
+            
+            print("-" * 80)
+            
+        except Exception as e:
+            print(f"❌ Error showing challenge consensus status: {e}")
 
     async def start_validation_loop(self, interval: int = 10):
         """Start the continuous validation loop"""
@@ -583,6 +881,65 @@ class QXValidator:
         """Stop the validation loop"""
         print("🛑 Stopping validator...")
         self.running = False
+    
+    async def start_node(self) -> bool:
+        """Start the blockchain node"""
+        if not self.node_manager:
+            print("⚠️ No node manager configured")
+            return True  # Continue without node
+        
+        print(f"🚀 Starting blockchain node for validator...")
+        success = await self.node_manager.start_node(validator=True)
+        
+        if success:
+            # Get the peer ID and register node identity
+            await asyncio.sleep(2)  # Wait for node to fully start
+            peer_id = self.node_manager.get_peer_id()
+            if peer_id:
+                print(f"🔗 Auto-registering validator node identity with peer ID: {peer_id}")
+                node_info = self.node_manager.get_node_info()
+                await self.register_node_identity(
+                    peer_id, 
+                    node_info['ws_endpoint'], 
+                    1  # Validator type
+                )
+        
+        return success
+    
+    async def stop_node(self):
+        """Stop the blockchain node"""
+        if self.node_manager:
+            print(f"🛑 Stopping blockchain node...")
+            await self.node_manager.stop_node()
+    
+    async def get_node_status(self) -> Dict[str, Any]:
+        """Get node status"""
+        if not self.node_manager:
+            return {"status": "no_node_manager"}
+        
+        return await self.node_manager.get_node_status()
+    
+    def setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown"""
+        def signal_handler(signum, frame):
+            print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+            asyncio.create_task(self.shutdown())
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    
+    async def shutdown(self):
+        """Graceful shutdown of validator and node"""
+        print("🛑 Shutting down validator and node...")
+        
+        # Stop validation loop
+        self.stop()
+        
+        # Stop blockchain node
+        await self.stop_node()
+        
+        print("✅ Shutdown complete")
+        sys.exit(0)
 
 async def main():
     parser = argparse.ArgumentParser(description='QX Chain Validator')
@@ -592,26 +949,74 @@ async def main():
     parser.add_argument('--interval', type=int, default=10, help='Validation interval in seconds')
     parser.add_argument('--register', action='store_true', help='Register as validator (requires sudo)')
     parser.add_argument('--auto-mode', action='store_true', help='Start in automatic validation mode (default: interactive)')
+    parser.add_argument('--peer-id', default=None, help='Node peer ID for blockchain network (deprecated, auto-generated)')
+    parser.add_argument('--node-endpoint', default='http://localhost:9966', help='Node endpoint (deprecated, auto-managed)')
+    parser.add_argument('--no-node', action='store_true', help='Don\'t start blockchain node (use external node)')
+    parser.add_argument('--node-name', default=None, help='Custom blockchain node name')
     
     args = parser.parse_args()
+    
+    # Setup node manager unless explicitly disabled
+    node_manager = None
+    if not args.no_node:
+        # Get auto-assigned ports to avoid conflicts
+        ws_port, http_port, p2p_port = get_auto_ports(9955)  # Different base port for validators
+        
+        # Create node name
+        node_name = args.node_name or f"validator_{args.seed.replace('//', '').replace('/', '_')}"
+        
+        # Create node manager
+        node_manager = NodeManager(
+            node_name=node_name,
+            ws_port=ws_port,
+            http_port=http_port,
+            p2p_port=p2p_port,
+            consensus="instant-seal"
+        )
+        
+        print(f"🔧 Will start blockchain node: {node_name}")
+        print(f"   Ports: WS={ws_port}, HTTP={http_port}, P2P={p2p_port}")
+        
+        # Update chain endpoint to use our node
+        args.chain = f"ws://localhost:{ws_port}"
     
     # Initialize validator
     validator = QXValidator(
         chain_endpoint=args.chain,
         ollama_endpoint=args.ollama,
-        validator_seed=args.seed
+        validator_seed=args.seed,
+        node_manager=node_manager
     )
+    
+    # Setup signal handlers for graceful shutdown
+    validator.setup_signal_handlers()
     
     print("🛡️ QX Chain Validator Starting...")
     
-    # Register validator if requested
-    if args.register:
-        if await validator.register_validator():
-            print("✅ Validator registration complete")
-        else:
-            print("❌ Failed to register validator. Continuing anyway...")
-    
     try:
+        # Start blockchain node first if managed
+        if node_manager:
+            if not await validator.start_node():
+                print("❌ Failed to start blockchain node. Exiting.")
+                return
+        
+        # Initialize chain connection after node is ready
+        if not await validator.initialize_chain_connection():
+            print("❌ Failed to connect to chain. Exiting.")
+            return
+        
+        # Register validator if requested
+        if args.register:
+            if await validator.register_validator():
+                print("✅ Validator registration complete")
+            else:
+                print("❌ Failed to register validator. Continuing anyway...")
+        
+        # Register node identity if peer_id provided (legacy support)
+        if args.peer_id:
+            print(f"🔗 Registering validator node identity...")
+            await validator.register_node_identity(args.peer_id, args.node_endpoint, 1)  # 1 = Validator type
+        
         if args.auto_mode:
             print("🔄 Starting automatic validation mode...")
             # Run validation loop
@@ -624,6 +1029,11 @@ async def main():
     except KeyboardInterrupt:
         print("\n🛑 Received interrupt signal")
         validator.stop()
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+    finally:
+        # Ensure cleanup
+        await validator.shutdown()
 
 if __name__ == "__main__":
     asyncio.run(main())

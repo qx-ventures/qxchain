@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default configuration
-CHAIN_ENDPOINT="ws://localhost:9944"
+CHAIN_ENDPOINT=""  # Will be auto-detected or specified
 CUSTOMER_SEED="//Alice"
 PYTHON_ENV=""
 
@@ -45,16 +45,20 @@ QX Chain Customer Interface Launcher
 Usage: $0 [OPTIONS]
 
 Options:
-    --chain ENDPOINT     Chain WebSocket endpoint (default: ws://localhost:9944)
+    --chain ENDPOINT     Chain WebSocket endpoint (default: auto-detect)
     --seed SEED         Customer account seed (default: //Alice)
     --env PATH          Python virtual environment path
     --help              Show this help message
 
 Examples:
-    $0                                          # Use defaults
-    $0 --chain ws://localhost:9944             # Specify chain endpoint
+    $0                                          # Auto-detect running nodes
+    $0 --chain ws://localhost:10314            # Connect to specific node port
     $0 --seed "//Bob"                          # Use different account
     $0 --env ./venv                            # Use specific Python environment
+
+First start some nodes:
+    ./start_node.sh worker --seed //Bob --setup-zoo
+    ./start_node.sh validator --seed //Charlie --register
 
 Customer Seeds:
     //Alice             Default customer account
@@ -91,6 +95,72 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Function to find running QX Chain nodes
+find_running_nodes() {
+    local found_endpoints=()
+    
+    # Check common port range for running qxchain processes
+    for port in $(seq 9944 9999) $(seq 10000 11000); do
+        if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>/dev/null; then
+            # Test if it's a qxchain node by trying an RPC call
+            local response=$(curl -s -m 2 -X POST "http://localhost:$port" \
+                -H "Content-Type: application/json" \
+                -d '{"id":1,"jsonrpc":"2.0","method":"system_name","params":[]}' \
+                2>/dev/null)
+            
+            if [[ "$response" == *'"result"'* ]] && [[ "$response" == *'"qxchain"'* || "$response" == *'"Substrate"'* ]]; then
+                found_endpoints+=("ws://localhost:$port")
+            fi
+        fi
+    done
+    
+    echo "${found_endpoints[@]}"
+}
+
+# Auto-detect chain endpoint if not specified
+if [ -z "$CHAIN_ENDPOINT" ]; then
+    print_info "Searching for running QX Chain nodes..."
+    
+    available_endpoints=($(find_running_nodes))
+    
+    if [ ${#available_endpoints[@]} -eq 0 ]; then
+        print_error "No QX Chain nodes found running"
+        echo ""
+        echo "Please start a node first:"
+        echo "  ./start_node.sh worker --seed //Bob --setup-zoo"
+        echo "  ./start_node.sh validator --seed //Charlie --register"
+        echo ""
+        echo "Or specify a chain endpoint manually:"
+        echo "  $0 --chain ws://localhost:PORT"
+        exit 1
+    elif [ ${#available_endpoints[@]} -eq 1 ]; then
+        CHAIN_ENDPOINT="${available_endpoints[0]}"
+        print_success "Found QX Chain node: $CHAIN_ENDPOINT"
+    else
+        echo ""
+        print_info "Multiple QX Chain nodes found:"
+        for i in "${!available_endpoints[@]}"; do
+            echo "  $((i+1))) ${available_endpoints[$i]}"
+        done
+        echo ""
+        echo -n "Select node to connect to [1]: "
+        read choice
+        
+        if [[ -z "$choice" ]]; then
+            choice=1
+        fi
+        
+        if [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#available_endpoints[@]} ]]; then
+            CHAIN_ENDPOINT="${available_endpoints[$((choice-1))]}"
+            print_success "Selected: $CHAIN_ENDPOINT"
+        else
+            print_error "Invalid selection"
+            exit 1
+        fi
+    fi
+    echo ""
+fi
 
 # Banner
 echo "

@@ -151,33 +151,6 @@ This provides a user-friendly interface to:
 3. Monitor request status
 4. View results
 
-**Option 2: Automated Test Script**
-
-```bash
-cd scripts
-
-# Run the inference test script
-python test_inference.py
-```
-
-This will:
-1. Submit an inference request to a worker
-2. Monitor the chain for inference submission
-3. Wait for validator challenges/approvals
-4. Display the final result
-
-### Custom Test Parameters
-
-You can customize the test with different parameters:
-
-```bash
-# Test with custom prompt
-python test_inference.py --prompt "What is machine learning?" --model 0
-
-# Test with different endpoints
-python test_inference.py --worker http://localhost:8001 --chain ws://localhost:9944
-```
-
 ### Manual API Testing
 
 Test the worker API directly:
@@ -190,20 +163,6 @@ curl -X POST http://localhost:8000/inference \
 
 # Check worker status
 curl http://localhost:8000/status
-```
-
-### Testing Individual Components
-
-**Test Setup:**
-```bash
-cd scripts
-./test_setup.sh
-```
-
-**Test Dependencies:**
-```bash
-cd scripts
-./check_dependencies.sh
 ```
 
 ## 🌐 Service Endpoints
@@ -229,7 +188,6 @@ qxchain/
 │   ├── start_validator.sh  # Start validator
 │   ├── start_customer.sh   # Start customer interface
 │   ├── customer.py         # Customer interface implementation
-│   ├── test_inference.py   # Test inference pipeline
 │   ├── ollama_worker.py    # Worker implementation
 │   └── validator.py        # Validator implementation
 └── logs/                   # Service logs

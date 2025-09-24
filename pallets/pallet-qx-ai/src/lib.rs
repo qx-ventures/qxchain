@@ -22,6 +22,38 @@ pub enum InferenceStatus {
 	Slashed,
 }
 
+/// Node identity information for linking workers/validators to blockchain nodes
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct NodeIdentity {
+	pub peer_id: BoundedVec<u8, ConstU32<64>>,
+	pub endpoint: BoundedVec<u8, ConstU32<256>>,
+	pub node_type: NodeType,
+}
+
+/// Node type classification
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum NodeType {
+	Worker,
+	Validator,
+	WorkerValidator, // Node that can be both
+}
+
+/// Reason for node slashing
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum SlashReason {
+	WorkerSlashed,
+	ValidatorMisbehavior,
+	NodeOffline,
+}
+
+/// Challenge data for tracking validator challenges
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct Challenge<AccountId> {
+	pub validator: AccountId,
+	pub expected_output: BoundedVec<u8, ConstU32<4096>>,
+	pub submitted_at: u32,
+}
+
 /// Request status for tracking
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum RequestStatus {
@@ -123,6 +155,26 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type WorkerStatus<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
 
+	/// Challenges for each inference - maps inference_id to list of challenges
+	#[pallet::storage]
+	pub type InferenceChallenges<T: Config> = StorageMap<_, Blake2_128Concat, u32, BoundedVec<Challenge<T::AccountId>, ConstU32<100>>>;
+
+	/// Banned workers - workers that have been slashed and removed from network
+	#[pallet::storage]
+	pub type BannedWorkers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
+
+	/// Node identities - maps account to node identity information
+	#[pallet::storage]
+	pub type NodeIdentities<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, NodeIdentity>;
+
+	/// Node to account mapping - maps peer_id to account
+	#[pallet::storage]
+	pub type NodeToAccount<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, T::AccountId>;
+
+	/// Slashed nodes - nodes that have been slashed and should be disconnected
+	#[pallet::storage]
+	pub type SlashedNodes<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, bool>;
+
 	/// Events emitted by the pallet
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -143,10 +195,18 @@ pub mod pallet {
 		InferenceValidated { inference_id: u32, validator: T::AccountId },
 		/// Worker slashed
 		WorkerSlashed { worker: T::AccountId, inference_id: u32, amount: <T::Currency as Currency<T::AccountId>>::Balance },
+		/// Worker banned from network
+		WorkerBanned { worker: T::AccountId, inference_id: u32 },
+		/// Challenge consensus reached
+		ChallengeConsensusReached { inference_id: u32, challenge_count: u32, total_validators: u32 },
 		/// Worker status updated
 		WorkerStatusUpdated { worker: T::AccountId, online: bool },
 		/// Request completed
 		RequestCompleted { request_id: u32, inference_id: u32 },
+		/// Node identity registered
+		NodeIdentityRegistered { account: T::AccountId, peer_id: BoundedVec<u8, ConstU32<64>>, node_type: u8 },
+		/// Node slashed due to worker/validator slashing
+		NodeSlashed { account: T::AccountId, peer_id: BoundedVec<u8, ConstU32<64>>, reason: u8 },
 	}
 
 	/// Errors that can be returned by this pallet
@@ -188,6 +248,20 @@ pub mod pallet {
 		PromptTooLong,
 		/// Output too long
 		OutputTooLong,
+		/// Worker is banned
+		WorkerBanned,
+		/// Challenge output too long
+		ChallengeOutputTooLong,
+		/// Node identity already registered
+		NodeIdentityAlreadyRegistered,
+		/// Invalid node identity format
+		InvalidNodeIdentity,
+		/// Node identity not found
+		NodeIdentityNotFound,
+		/// Invalid peer ID format
+		InvalidPeerId,
+		/// Node already slashed
+		NodeAlreadySlashed,
 	}
 
 	#[pallet::call]
@@ -202,6 +276,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			
 			ensure!(!Workers::<T>::contains_key(&who), Error::<T>::WorkerAlreadyRegistered);
+			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
 			ensure!(stake >= T::MinWorkerStake::get(), Error::<T>::InsufficientStake);
 			
 			// Reserve the stake
@@ -248,6 +323,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			
 			ensure!(Workers::<T>::contains_key(&target_worker), Error::<T>::WorkerNotFound);
+			ensure!(!BannedWorkers::<T>::contains_key(&target_worker), Error::<T>::WorkerBanned);
 			
 			let bounded_prompt = prompt;
 			
@@ -321,6 +397,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			
 			ensure!(Workers::<T>::contains_key(&who), Error::<T>::WorkerNotFound);
+			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
 			
 			let request = InferenceRequests::<T>::get(&request_id)
 				.ok_or(Error::<T>::RequestNotFound)?;
@@ -373,16 +450,54 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Challenge an inference (simplified)
+		/// Challenge an inference with expected output
 		#[pallet::call_index(5)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn challenge_inference(
 			origin: OriginFor<T>,
 			inference_id: u32,
+			expected_output: BoundedVec<u8, ConstU32<4096>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			
 			ensure!(Validators::<T>::contains_key(&who), Error::<T>::ValidatorNotFound);
+			
+			let inference = InferenceResults::<T>::get(&inference_id)
+				.ok_or(Error::<T>::InferenceNotFound)?;
+			
+			ensure!(inference.status == InferenceStatus::Pending, Error::<T>::InferenceNotPending);
+			ensure!(inference.worker != who, Error::<T>::CannotChallengeSelf);
+			
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let block_number: u32 = current_block.saturated_into();
+			
+			let challenge = Challenge {
+				validator: who.clone(),
+				expected_output: expected_output.clone(),
+				submitted_at: block_number,
+			};
+			
+			// Check if validator already challenged this inference
+			if let Some(existing_challenges) = InferenceChallenges::<T>::get(&inference_id) {
+				ensure!(!existing_challenges.iter().any(|c| c.validator == who), Error::<T>::AlreadyChallenged);
+			}
+			
+			// Add challenge to storage
+			InferenceChallenges::<T>::try_mutate(&inference_id, |challenges_opt| {
+				let challenges = challenges_opt.get_or_insert_with(|| BoundedVec::new());
+				challenges.try_push(challenge).map_err(|_| Error::<T>::WorkerQueueFull)?;
+				Ok::<(), Error<T>>(())
+			})?;
+			
+			// Update inference status to challenged
+			InferenceResults::<T>::try_mutate(&inference_id, |result_opt| {
+				let result = result_opt.as_mut().ok_or(Error::<T>::InferenceNotFound)?;
+				result.status = InferenceStatus::Challenged;
+				Ok::<(), Error<T>>(())
+			})?;
+			
+			// Check for consensus after adding challenge
+			Self::check_challenge_consensus(inference_id, expected_output)?;
 			
 			Self::deposit_event(Event::InferenceChallenged { inference_id, validator: who });
 			Ok(())
@@ -402,5 +517,163 @@ pub mod pallet {
 			Self::deposit_event(Event::InferenceValidated { inference_id, validator: who });
 			Ok(())
 		}
+
+		/// Register or update node identity for an existing worker/validator
+		#[pallet::call_index(7)]
+		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		pub fn register_node_identity(
+			origin: OriginFor<T>,
+			peer_id: BoundedVec<u8, ConstU32<64>>,
+			endpoint: BoundedVec<u8, ConstU32<256>>,
+			node_type: u8, // 0=Worker, 1=Validator, 2=WorkerValidator
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			
+			// Ensure the account is either a worker or validator
+			ensure!(
+				Workers::<T>::contains_key(&who) || Validators::<T>::contains_key(&who),
+				Error::<T>::WorkerNotFound
+			);
+			
+			// Convert node_type u8 to enum
+			let node_type_enum = match node_type {
+				0 => NodeType::Worker,
+				1 => NodeType::Validator,
+				2 => NodeType::WorkerValidator,
+				_ => return Err(Error::<T>::InvalidNodeIdentity.into()),
+			};
+			
+			// Check if peer_id is already registered to another account
+			if let Some(existing_account) = NodeToAccount::<T>::get(&peer_id) {
+				ensure!(existing_account == who, Error::<T>::NodeIdentityAlreadyRegistered);
+			}
+			
+			// Remove old mapping if exists
+			if let Some(old_identity) = NodeIdentities::<T>::get(&who) {
+				NodeToAccount::<T>::remove(&old_identity.peer_id);
+			}
+			
+			let node_identity = NodeIdentity {
+				peer_id: peer_id.clone(),
+				endpoint,
+				node_type: node_type_enum.clone(),
+			};
+			
+			NodeIdentities::<T>::insert(&who, &node_identity);
+			NodeToAccount::<T>::insert(&peer_id, &who);
+			
+			Self::deposit_event(Event::NodeIdentityRegistered { 
+				account: who, 
+				peer_id, 
+				node_type 
+			});
+			
+			Ok(())
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		/// Check if challenge consensus is reached (2/3+ validators agree)
+		fn check_challenge_consensus(
+			inference_id: u32,
+			expected_output: BoundedVec<u8, ConstU32<4096>>,
+		) -> DispatchResult {
+			let challenges = InferenceChallenges::<T>::get(&inference_id)
+				.unwrap_or_default();
+			
+			// Count validators with matching expected output
+			let matching_challenges = challenges.iter()
+				.filter(|c| c.expected_output == expected_output)
+				.count() as u32;
+			
+			// Get total number of registered validators
+			let total_validators = Validators::<T>::iter().count() as u32;
+			
+			// Check if we have 2/3+ consensus (using ceiling division)
+			let required_consensus = (total_validators * 2 + 2) / 3; // Ceiling of 2/3
+			
+			if matching_challenges >= required_consensus && total_validators > 0 {
+				Self::deposit_event(Event::ChallengeConsensusReached {
+					inference_id,
+					challenge_count: matching_challenges,
+					total_validators,
+				});
+				
+				// Execute slashing and banning
+				Self::slash_and_ban_worker(inference_id)?;
+			}
+			
+			Ok(())
+		}
+		
+		/// Slash worker stake and ban them from the network, including node-level slashing
+		fn slash_and_ban_worker(inference_id: u32) -> DispatchResult {
+			let inference = InferenceResults::<T>::get(&inference_id)
+				.ok_or(Error::<T>::InferenceNotFound)?;
+			
+			let worker = &inference.worker;
+			
+			// Get worker's stake
+			let stake = Workers::<T>::get(worker)
+				.ok_or(Error::<T>::WorkerNotFound)?;
+			
+			// Slash the worker's stake (confiscate it)
+			let _ = T::Currency::slash_reserved(worker, stake);
+			
+			// Ban the worker
+			BannedWorkers::<T>::insert(worker, true);
+			
+			// Slash the associated node if it exists
+			if let Some(node_identity) = NodeIdentities::<T>::get(worker) {
+				SlashedNodes::<T>::insert(&node_identity.peer_id, true);
+				
+				Self::deposit_event(Event::NodeSlashed {
+					account: worker.clone(),
+					peer_id: node_identity.peer_id,
+					reason: 0, // WorkerSlashed
+				});
+			}
+			
+			// Remove worker from active workers
+			Workers::<T>::remove(worker);
+			WorkerQueues::<T>::remove(worker);
+			WorkerStatus::<T>::remove(worker);
+			
+			// Update inference status to slashed
+			InferenceResults::<T>::try_mutate(&inference_id, |result_opt| {
+				let result = result_opt.as_mut().ok_or(Error::<T>::InferenceNotFound)?;
+				result.status = InferenceStatus::Slashed;
+				Ok::<(), Error<T>>(())
+			})?;
+			
+			Self::deposit_event(Event::WorkerSlashed {
+				worker: worker.clone(),
+				inference_id,
+				amount: stake,
+			});
+			
+			Self::deposit_event(Event::WorkerBanned {
+				worker: worker.clone(),
+				inference_id,
+			});
+			
+			Ok(())
+		}
+		
+		/// Check if a node is slashed
+		pub fn is_node_slashed(peer_id: &BoundedVec<u8, ConstU32<64>>) -> bool {
+			SlashedNodes::<T>::get(peer_id).unwrap_or(false)
+		}
+		
+		/// Get node identity for account
+		pub fn get_node_identity(account: &T::AccountId) -> Option<NodeIdentity> {
+			NodeIdentities::<T>::get(account)
+		}
+		
+		/// Get account for node peer_id
+		pub fn get_account_for_node(peer_id: &BoundedVec<u8, ConstU32<64>>) -> Option<T::AccountId> {
+			NodeToAccount::<T>::get(peer_id)
+		}
+		
 	}
 }
