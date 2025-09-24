@@ -41,7 +41,7 @@ Choose between **Docker** (recommended for quick testing) or **Native** setup:
 docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
 
 # Pull AI model
-docker exec -it ollama ollama pull gemma2:2b
+docker exec -it ollama ollama pull gemma3:1b
 ```
 
 **2. Build QX Chain Node:**

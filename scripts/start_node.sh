@@ -68,7 +68,7 @@ check_and_start_ollama() {
 
 # Function to ensure required model is available
 ensure_ollama_model() {
-    local model="gemma3:2b"
+    local model="gemma3:1b"
     
     echo -e "${BLUE}🔍 Checking if model $model is available...${NC}"
     

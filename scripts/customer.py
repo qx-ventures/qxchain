@@ -76,7 +76,7 @@ class QXCustomer:
         # We assume workers have standard models
         # This could be extended to query on-chain model storage
         return [
-            {"id": 0, "name": "zoo_assistant", "ollama_model": "gemma3:2b"}
+            {"id": 0, "name": "zoo_assistant", "ollama_model": "gemma3:1b"}
         ]
     
     async def submit_request(self, worker_address: str, prompt: str, model_id: int = 0) -> Optional[int]:
