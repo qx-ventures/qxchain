@@ -31,16 +31,86 @@ The QX Chain consists of several key components:
 
 ## 🚀 Quick Start
 
-### 1. Complete Setup (One-time)
+Choose between **Docker** (recommended for quick testing) or **Native** setup:
 
-Run the complete setup script to install dependencies, build the chain, and configure Ollama:
+### Option A: Docker Setup (Recommended)
 
+**1. Start Ollama Service:**
+```bash
+# Start official Ollama container
+docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+
+# Pull AI model
+docker exec -it ollama ollama pull gemma2:2b
+```
+
+**2. Build QX Chain Node:**
+```bash
+# Build the unified node image (Apple Silicon / arm64)
+DOCKER_BUILDKIT=1 docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
+```
+
+**3. Start Services (In Separate Terminals):**
+
+**Terminal 1 - Worker Node:**
+```bash
+docker run -d -p 9944:9944 -p 9933:9933 --name worker \
+  qxchain-node --type worker --seed //Bob --setup-zoo
+```
+
+**Terminal 2 - Validator Node:**
+```bash
+docker run -d -p 9945:9945 -p 9934:9934 --name validator \
+  qxchain-node --type validator --seed //Charlie --auto-register
+```
+
+**Terminal 3 - Client Interface:**
+```bash
+# Build client image
+docker build -f Dockerfile.client -t qxchain-client .
+
+# Run interactive client
+docker run -it --name client qxchain-client
+```
+
+**4. Check Status:**
+```bash
+# View container logs
+docker logs worker
+docker logs validator
+docker logs client
+
+# Check blockchain health
+curl http://localhost:9933/health
+```
+
+### Docker Dev Caching (Faster Rebuilds)
+
+Use BuildKit cache mounts (already enabled in Dockerfile) and persistent volumes for scripts:
+
+```bash
+# Ensure BuildKit is on
+export DOCKER_BUILDKIT=1
+
+# Build (arm64), caches persist across builds
+docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
+
+# Optional: mount scripts live for development
+docker run -it \
+  -v $(pwd)/scripts:/home/qxuser/scripts \
+  -p 9944:9944 -p 9933:9933 \
+  --name worker-dev qxchain-node --type worker --seed //Bob
+```
+
+### Option B: Native Setup
+
+**1. Complete Setup (One-time):**
 ```bash
 cd scripts
 ./setup_qx_chain.sh
 ```
 
-### 2. Start Services (In Separate Terminals)
+**2. Start Services (In Separate Terminals):**
 
 **Terminal 1 - Start QX Chain:**
 ```bash
@@ -167,6 +237,15 @@ curl http://localhost:8000/status
 
 ## 🌐 Service Endpoints
 
+### Docker Services
+- **Worker Node WebSocket**: `ws://localhost:9944`
+- **Worker Node HTTP**: `http://localhost:9933`
+- **Validator Node WebSocket**: `ws://localhost:9945`
+- **Validator Node HTTP**: `http://localhost:9934`
+- **Ollama API**: `http://localhost:11434`
+- **Customer Interface**: Interactive terminal interface via Docker container
+
+### Native Services
 - **QX Chain RPC**: `ws://localhost:9944`
 - **QX Chain HTTP**: `http://localhost:9944`
 - **Ollama API**: `http://localhost:11434`
@@ -256,7 +335,21 @@ curl -X POST http://localhost:9944 \
 
 ## 🛑 Stopping Services
 
-To stop all services:
+### Docker Services
+```bash
+# Stop and remove containers
+docker stop ollama worker validator client
+docker rm ollama worker validator client
+
+# Remove images (optional)
+docker rmi ollama/ollama qxchain-node qxchain-client
+
+# Clean up volumes (WARNING: deletes all data)
+docker volume rm ollama
+```
+
+### Native Services
+To stop all native services:
 - Press `Ctrl+C` in each terminal running the services
 - Or use the cleanup script: `./scripts/cleanup.sh` (if available)
 

@@ -374,7 +374,7 @@ class OllamaWorker:
         
         model_id = await self.register_model(
             model_name="zoo_assistant",
-            ollama_model="gemma3:4b",  # Lightweight model for testing
+            ollama_model="gemma3:2b",  # Lightweight model for testing
             endpoint="terminal",  # Terminal-only mode
             seed=42,  # Fixed seed for deterministic inference
             temperature=0.7,  # Consistent temperature

@@ -1,0 +1,47 @@
+# Build artifacts
+target/
+# Cargo.lock - needed for reproducible builds
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Node modules
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+*.md
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

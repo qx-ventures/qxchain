@@ -364,12 +364,12 @@ class QXValidator:
             
             # Map model names to Ollama models
             ollama_model_map = {
-                'zoo_assistant': 'gemma3:4b',
-                'permits_assistant': 'gemma3:4b',
-                'parks_assistant': 'gemma3:4b'
+                'zoo_assistant': 'gemma3:2b',
+                'permits_assistant': 'gemma3:2b',
+                'parks_assistant': 'gemma3:2b'
             }
             
-            ollama_model = ollama_model_map.get(model_name, 'gemma3:4b')
+            ollama_model = ollama_model_map.get(model_name, 'gemma3:2b')
             
             print(f"🔍 Running deterministic inference verification:")
             print(f"   Model: {ollama_model}")

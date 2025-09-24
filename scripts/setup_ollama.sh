@@ -73,7 +73,7 @@ fi
 
 # Pull required models
 echo -e "${BLUE}📥 Pulling Ollama models...${NC}"
-ollama pull gemma3:4b
+ollama pull gemma3:2b
 echo -e "${GREEN}✅ Models pulled successfully${NC}"
 
 echo -e "${GREEN}✅ Ollama setup complete${NC}"
