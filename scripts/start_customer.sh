@@ -101,7 +101,7 @@ find_running_nodes() {
     local found_endpoints=()
     
     # Check common port range for running qxchain processes
-    for port in $(seq 9944 9999) $(seq 10000 11000); do
+    for port in 9933 $(seq 9944 9999) $(seq 10000 11000); do
         if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>/dev/null; then
             # Test if it's a qxchain node by trying an RPC call
             local response=$(curl -s -m 2 -X POST "http://localhost:$port" \

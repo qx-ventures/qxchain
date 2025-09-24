@@ -20,7 +20,7 @@ from typing import Optional, Dict, Any
 class NodeManager:
     def __init__(self, 
                  node_name: str,
-                 ws_port: int = 9944,
+                 ws_port: int = 9933,
                  http_port: int = 9933,
                  p2p_port: int = 30333,
                  consensus: str = "instant-seal",
@@ -344,7 +344,7 @@ class NodeManager:
         return None
 
 # Utility functions for common node setups
-def create_worker_node_manager(worker_name: str, base_port: int = 9944) -> NodeManager:
+def create_worker_node_manager(worker_name: str, base_port: int = 9933) -> NodeManager:
     """Create a node manager for a worker"""
     return NodeManager(
         node_name=f"worker_{worker_name}",
@@ -365,7 +365,7 @@ def create_validator_node_manager(validator_name: str, base_port: int = 9955) ->
     )
 
 # Auto-assign ports based on process ID to avoid conflicts
-def get_auto_ports(base_port: int = 9944) -> tuple[int, int, int]:
+def get_auto_ports(base_port: int = 9933) -> tuple[int, int, int]:
     """Get automatically assigned ports to avoid conflicts"""
     import hashlib
     import os

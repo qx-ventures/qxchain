@@ -62,7 +62,7 @@ EOF
 RUN chmod +x /home/qxuser/start_client.sh
 
 # Environment variables
-ENV CHAIN_ENDPOINT=ws://host.docker.internal:9933
+ENV CHAIN_ENDPOINT=ws://localhost:9933
 ENV CUSTOMER_SEED=//Alice
 ENV INTERACTIVE=true
 

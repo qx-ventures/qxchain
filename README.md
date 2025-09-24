@@ -11,6 +11,8 @@ QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine
 - **Multiple AI Models**: Support for various AI models through Ollama integration
 - **Real-time Status Tracking**: Monitor worker availability, request status, and inference results
 - **Interactive Customer Interface**: User-friendly interface for browsing workers and submitting requests
+- **Auto-Configuration**: Validators auto-register, nodes auto-connect, no complex setup needed
+- **Interactive Mode**: All nodes run in interactive mode for full control and monitoring
 
 ## 🏗️ Architecture
 
@@ -35,6 +37,8 @@ Choose between **Docker** (recommended for quick testing) or **Native** setup:
 
 ### Option A: Docker Setup (Recommended)
 
+**🎯 Ultra-Simple Setup - Just 3 Commands!**
+
 **1. Start Ollama Service:**
 ```bash
 # Start official Ollama container
@@ -44,24 +48,27 @@ docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
 docker exec -it ollama ollama pull gemma3:1b
 ```
 
-**2. Build QX Chain Node:**
+**2. Build QX Chain Images:**
 ```bash
 # Build the unified node image (Apple Silicon / arm64)
 DOCKER_BUILDKIT=1 docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
+
+# Build the client image
+docker build -f Dockerfile.client -t qxchain-client .
 ```
 
-**3. Start Services (In Separate Terminals):**
+**3. Start Services (Simplified Setup):**
 
-**Terminal 1 - Worker Node:**
+**Terminal 1 - Worker Node (starts blockchain automatically):**
 ```bash
-docker run -d -p 9944:9944 -p 9933:9933 --name worker \
-  qxchain-node --type worker --seed //Bob --setup-zoo
+docker run -it --rm -p 9933:9933 --name worker \
+  qxchain-node /home/qxuser/start_node.sh --type worker --seed //Bob
 ```
 
-**Terminal 2 - Validator Node:**
+**Terminal 2 - Validator Node (connects to existing blockchain):**
 ```bash
-docker run -d -p 9945:9945 -p 9934:9934 --name validator \
-  qxchain-node --type validator --seed //Charlie --auto-register
+docker run -it --rm --name validator \
+  qxchain-node /home/qxuser/start_node.sh --type validator --seed //Charlie
 ```
 
 **Terminal 3 - Client Interface:**
@@ -70,18 +77,35 @@ docker run -d -p 9945:9945 -p 9934:9934 --name validator \
 docker build -f Dockerfile.client -t qxchain-client .
 
 # Run interactive client
-docker run -it --name client qxchain-client
+docker run -it --rm --name client qxchain-client
 ```
+
+**🎉 That's it! Your QX Chain network is running!**
+
+**What happens automatically:**
+- ✅ First node starts blockchain on port 9933
+- ✅ Subsequent nodes connect to existing blockchain  
+- ✅ Validators auto-register with stake and node identity
+- ✅ Validators run in continuous auto-mode (monitoring every 10s)
+- ✅ Workers run in continuous auto-mode (queue listener every 5s)
+- ✅ Status updates shown every 30 seconds for both
+- ✅ No complex configuration needed
 
 **4. Check Status:**
 ```bash
-# View container logs
+# Check running containers
+docker ps
+
+# View logs
 docker logs worker
 docker logs validator
-docker logs client
+```
 
-# Check blockchain health
-curl http://localhost:9933/health
+**5. Stop Services:**
+```bash
+# Stop all containers
+docker stop worker validator client ollama 2>/dev/null || true
+docker rm worker validator client ollama 2>/dev/null || true
 ```
 
 ### Docker Dev Caching (Faster Rebuilds)
@@ -238,10 +262,8 @@ curl http://localhost:8000/status
 ## 🌐 Service Endpoints
 
 ### Docker Services
-- **Worker Node WebSocket**: `ws://localhost:9944`
-- **Worker Node HTTP**: `http://localhost:9933`
-- **Validator Node WebSocket**: `ws://localhost:9945`
-- **Validator Node HTTP**: `http://localhost:9934`
+- **Blockchain WebSocket**: `ws://localhost:9933` (shared by all nodes)
+- **Blockchain HTTP**: `http://localhost:9933` (shared by all nodes)
 - **Ollama API**: `http://localhost:11434`
 - **Customer Interface**: Interactive terminal interface via Docker container
 
@@ -380,6 +402,31 @@ To stop all native services:
 - `//Dave`, `//Eve`, `//Ferdie` - Additional test accounts
 
 **Quick Fix**: The scripts now use the correct minimum stake amounts (1,000 for workers, 100 for validators)
+
+## 🎉 Quick Summary
+
+**🚀 Get Started in 3 Commands:**
+```bash
+# 1. Start Ollama
+docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+docker exec -it ollama ollama pull gemma3:1b
+
+# 2. Build Images  
+DOCKER_BUILDKIT=1 docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
+docker build -f Dockerfile.client -t qxchain-client .
+
+# 3. Run Network
+docker run -it --rm -p 9933:9933 --name worker qxchain-node /home/qxuser/start_node.sh --type worker --seed //Bob
+docker run -it --rm --name validator qxchain-node /home/qxuser/start_node.sh --type validator --seed //Charlie  
+docker run -it --rm --name client qxchain-client
+```
+
+**✨ What You Get:**
+- **Auto-Configuration**: Validators register automatically, nodes connect automatically
+- **Auto-Mode**: Both workers and validators run continuously in auto-mode
+- **Single Port**: Everything uses `ws://localhost:9933`
+- **Status Updates**: Periodic status reports every 30 seconds
+- **Zero Setup**: No complex configuration needed
 
 ## 📝 License
 

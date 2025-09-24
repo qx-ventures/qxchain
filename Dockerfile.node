@@ -97,8 +97,8 @@ ACCOUNT_SEED="${ACCOUNT_SEED:-//Bob}"
 OLLAMA_ENDPOINT="${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}"
 SETUP_ZOO="${SETUP_ZOO:-true}"
 INTERACTIVE="${INTERACTIVE:-false}"
-AUTO_REGISTER="${AUTO_REGISTER:-false}"
-AUTO_MODE="${AUTO_MODE:-false}"
+AUTO_REGISTER="${AUTO_REGISTER:-true}"
+AUTO_MODE="${AUTO_MODE:-true}"
 BOOTNODES="${BOOTNODES:-}"
 
 # Parse command line arguments
@@ -211,9 +211,23 @@ wait_for_service() {
     return 1
 }
 
+# Function to check if blockchain is already running
+check_blockchain_running() {
+    curl -s http://localhost:9933 > /dev/null 2>&1
+}
+
 # Function to start blockchain node
 start_blockchain_node() {
-    echo -e "${BLUE}🔗 Starting QX Chain blockchain node...${NC}"
+    # Always try to connect to ws://localhost:9933 first
+    echo -e "${BLUE}🔗 Checking for existing blockchain at ws://localhost:9933...${NC}"
+    
+    if check_blockchain_running; then
+        echo -e "${GREEN}✅ Found existing blockchain at ws://localhost:9933${NC}"
+        echo -e "${BLUE}🔗 Connecting to existing blockchain (client-only mode)${NC}"
+        return 0
+    fi
+    
+    echo -e "${YELLOW}📋 No existing blockchain found, starting new blockchain node...${NC}"
     
     # Determine blockchain account based on node type and seed
     local blockchain_account=""
@@ -248,11 +262,6 @@ start_blockchain_node() {
         --port 30333 \
         --rpc-port 9933"
     
-    # Add bootnodes if specified
-    if [ ! -z "$BOOTNODES" ]; then
-        node_cmd="$node_cmd --bootnodes $BOOTNODES"
-    fi
-    
     echo -e "${BLUE}📋 Blockchain account: $blockchain_account${NC}"
     echo -e "${BLUE}📋 Node command: $node_cmd${NC}"
     
@@ -285,9 +294,7 @@ start_worker() {
         worker_cmd="$worker_cmd --setup-zoo"
     fi
     
-    if [ "$INTERACTIVE" = "true" ]; then
-        worker_cmd="$worker_cmd --interactive"
-    fi
+    # Workers run in auto-mode by default (queue listener)
     
     echo -e "${BLUE}📋 Worker command: $worker_cmd${NC}"
     
@@ -303,23 +310,26 @@ start_worker() {
 start_validator() {
     echo -e "${PURPLE}🛡️ Starting validator component...${NC}"
     
+    # Always use localhost:9933 for simplicity
+    local chain_endpoint="ws://localhost:9933"
+    
+    # Generate a unique peer ID for this validator
+    local peer_id="validator_$(echo $ACCOUNT_SEED | tr -d '/' | tr '[:upper:]' '[:lower:]')_$(date +%s)"
+    local node_endpoint="ws://localhost:9933"
+    
     local validator_cmd="python3 /home/qxuser/scripts/validator.py \
-        --chain ws://localhost:9933 \
+        --chain $chain_endpoint \
         --ollama $OLLAMA_ENDPOINT \
         --seed \"$ACCOUNT_SEED\" \
-        --no-node"
+        --no-node \
+        --peer-id \"$peer_id\" \
+        --node-endpoint \"$node_endpoint\""
     
-    if [ "$AUTO_REGISTER" = "true" ]; then
-        validator_cmd="$validator_cmd --register"
-    fi
+    # Always auto-register validators
+    validator_cmd="$validator_cmd --register"
     
-    if [ "$AUTO_MODE" = "true" ]; then
-        validator_cmd="$validator_cmd --auto-mode"
-    fi
-    
-    if [ "$INTERACTIVE" = "true" ]; then
-        validator_cmd="$validator_cmd --interactive"
-    fi
+    # Always use auto-mode for validators (continuous validation loop)
+    validator_cmd="$validator_cmd --auto-mode"
     
     echo -e "${BLUE}📋 Validator command: $validator_cmd${NC}"
     
@@ -429,8 +439,8 @@ ENV ACCOUNT_SEED=//Bob
 ENV OLLAMA_ENDPOINT=http://host.docker.internal:11434
 ENV SETUP_ZOO=true
 ENV INTERACTIVE=false
-ENV AUTO_REGISTER=false
-ENV AUTO_MODE=false
+ENV AUTO_REGISTER=true
+ENV AUTO_MODE=true
 ENV BOOTNODES=""
 
 # Health check

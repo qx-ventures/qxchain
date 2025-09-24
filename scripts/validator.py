@@ -24,7 +24,7 @@ from node_manager import NodeManager, create_validator_node_manager, get_auto_po
 
 class QXValidator:
     def __init__(self, 
-                 chain_endpoint: str = "ws://localhost:9944",
+                 chain_endpoint: str = "ws://localhost:9933",
                  ollama_endpoint: str = "http://localhost:11434",
                  validator_seed: str = "//Charlie",
                  node_manager: Optional[NodeManager] = None):
@@ -513,7 +513,8 @@ class QXValidator:
             pending_inferences = await self.get_pending_inferences()
             
             if not pending_inferences:
-                # No pending inferences - this is normal for MVP
+                # No pending inferences - show status
+                print("✅ No pending inferences to validate (all clear)")
                 return
             
             print(f"🔍 Found {len(pending_inferences)} pending inference(s) to validate")
@@ -867,14 +868,33 @@ class QXValidator:
     async def start_validation_loop(self, interval: int = 10):
         """Start the continuous validation loop"""
         print(f"🔄 Starting validation loop (interval: {interval}s)")
+        print("🛡️ Validator will continuously monitor and validate inferences")
+        print("📊 Status updates will be shown every 30 seconds")
         self.running = True
+        
+        status_counter = 0
         
         while self.running:
             if self.registered:
+                # Show status every 3 iterations (30 seconds with 10s interval)
+                if status_counter % 3 == 0:
+                    print(f"\n{'='*50}")
+                    print(f"🛡️ Validator Status Check (Cycle {status_counter + 1})")
+                    print(f"📅 Time: {asyncio.get_event_loop().time():.0f}")
+                    print(f"✅ Registered: {self.registered}")
+                    print(f"🔗 Chain Connected: {self.chain is not None}")
+                    print(f"📊 Processed Inferences: {len(self.processed_inferences)}")
+                    print(f"{'='*50}")
+                
                 await self.process_pending_inferences()
             else:
-                print("⚠️ Validator not registered, skipping validation")
+                print("⚠️ Validator not registered, attempting to register...")
+                if await self.register_validator():
+                    print("✅ Validator registration successful")
+                else:
+                    print("❌ Validator registration failed, retrying in next cycle")
             
+            status_counter += 1
             await asyncio.sleep(interval)
     
     def stop(self):
@@ -943,7 +963,7 @@ class QXValidator:
 
 async def main():
     parser = argparse.ArgumentParser(description='QX Chain Validator')
-    parser.add_argument('--chain', default='ws://localhost:9944', help='Chain endpoint')
+    parser.add_argument('--chain', default='ws://localhost:9933', help='Chain endpoint')
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
     parser.add_argument('--seed', default='//Charlie', help='Validator account seed')
     parser.add_argument('--interval', type=int, default=10, help='Validation interval in seconds')

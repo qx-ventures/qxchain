@@ -25,7 +25,7 @@ from node_manager import NodeManager, create_worker_node_manager, get_auto_ports
 
 class OllamaWorker:
     def __init__(self, 
-                 chain_endpoint: str = "ws://localhost:9944",
+                 chain_endpoint: str = "ws://localhost:9933",
                  ollama_endpoint: str = "http://localhost:11434",
                  worker_seed: str = "//Bob",
                  node_manager: Optional[NodeManager] = None):
@@ -294,7 +294,7 @@ class OllamaWorker:
                         self.substrate.get_block_number(None)
                     except:
                         print(f"🔄 Reconnecting to chain (attempt {attempt + 1}/{max_retries})")
-                        chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                        chain_url = getattr(self.substrate, 'url', "ws://localhost:9933")
                         self.substrate = SubstrateInterface(url=chain_url)
                     
                     call = self.substrate.compose_call(
@@ -514,14 +514,28 @@ class OllamaWorker:
     async def queue_listener(self):
         """Main queue listener loop"""
         print("🎧 Starting queue listener...")
+        print("🤖 Worker will continuously monitor and process inference requests")
+        print("📊 Status updates will be shown every 30 seconds")
         self.queue_listener_running = True
         
         # Set worker as online
         await self.update_worker_status(True)
         
+        status_counter = 0
+        
         try:
             while self.queue_listener_running:
                 try:
+                    # Show status every 6 iterations (30 seconds with 5s interval)
+                    if status_counter % 6 == 0:
+                        print(f"\n{'='*50}")
+                        print(f"🤖 Worker Status Check (Cycle {status_counter + 1})")
+                        print(f"📅 Time: {asyncio.get_event_loop().time():.0f}")
+                        print(f"🔗 Chain Connected: {self.substrate is not None}")
+                        print(f"📊 Queue Listener Running: {self.queue_listener_running}")
+                        print(f"🏠 Worker Address: {self.worker_address}")
+                        print(f"{'='*50}")
+                    
                     # Check if node is slashed first
                     node_identity = await self.get_node_identity()
                     if node_identity and 'peer_id' in node_identity:
@@ -546,8 +560,9 @@ class OllamaWorker:
                                 print(f"⏭️ Skipping request {request['id']} with status: {request['status']}")
                             await asyncio.sleep(1)  # Small delay between requests
                     else:
-                        print(f"💤 No requests found in queue for worker {self.worker_address}")
+                        print("✅ No requests in queue (all clear)")
                     
+                    status_counter += 1
                     # Wait before checking again
                     await asyncio.sleep(5)
                     
@@ -803,7 +818,7 @@ class OllamaWorker:
             try:
                 self.substrate.get_block_number(None)
             except:
-                chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                chain_url = getattr(self.substrate, 'url', "ws://localhost:9933")
                 self.substrate = SubstrateInterface(url=chain_url)
             
             # First find the inference ID for this request
@@ -849,7 +864,7 @@ class OllamaWorker:
             try:
                 self.substrate.get_block_number(None)
             except:
-                chain_url = getattr(self.substrate, 'url', "ws://localhost:9944")
+                chain_url = getattr(self.substrate, 'url', "ws://localhost:9933")
                 self.substrate = SubstrateInterface(url=chain_url)
             
             # Find the inference for this request
@@ -1024,13 +1039,13 @@ async def main():
     print("🌟 QX Chain Ollama Worker Starting...")
     
     parser = argparse.ArgumentParser(description='QX Chain Ollama Worker')
-    parser.add_argument('--chain', default='ws://localhost:9944', help='Chain endpoint')
+    parser.add_argument('--chain', default='ws://localhost:9933', help='Chain endpoint')
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
     parser.add_argument('--seed', default='//Bob', help='Worker account seed')
     parser.add_argument('--setup-zoo', action='store_true', help='Setup zoo assistant model')
     parser.add_argument('--interactive', action='store_true', help='Start in interactive mode')
     parser.add_argument('--peer-id', default=None, help='Node peer ID for blockchain network (deprecated, auto-generated)')
-    parser.add_argument('--node-endpoint', default='http://localhost:9944', help='Node endpoint (deprecated, auto-managed)')
+    parser.add_argument('--node-endpoint', default='http://localhost:9933', help='Node endpoint (deprecated, auto-managed)')
     parser.add_argument('--start-node', action='store_true', help='Start blockchain node with worker (default: True)')
     parser.add_argument('--no-node', action='store_true', help='Don\'t start blockchain node (use external node)')
     parser.add_argument('--node-name', default=None, help='Custom blockchain node name')
@@ -1041,7 +1056,7 @@ async def main():
     node_manager = None
     if not args.no_node:
         # Get auto-assigned ports to avoid conflicts
-        ws_port, http_port, p2p_port = get_auto_ports(9944)
+        ws_port, http_port, p2p_port = get_auto_ports(9933)
         
         # Create node name
         node_name = args.node_name or f"worker_{args.seed.replace('//', '').replace('/', '_')}"

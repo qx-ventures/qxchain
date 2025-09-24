@@ -18,7 +18,7 @@ from substrateinterface.exceptions import SubstrateRequestException
 
 class QXCustomer:
     def __init__(self, 
-                 chain_endpoint: str = "ws://localhost:9944",
+                 chain_endpoint: str = "ws://localhost:9933",
                  customer_seed: str = "//Alice"):
         
         self.substrate = SubstrateInterface(url=chain_endpoint)
@@ -69,6 +69,36 @@ class QXCustomer:
             return workers
         except Exception as e:
             print(f"❌ Error getting workers: {e}")
+            return []
+
+    async def get_validators(self) -> List[Dict]:
+        """Get list of registered validators from chain"""
+        try:
+            # Query validators from the correct storage
+            validators_query = self.substrate.query_map('QxAi', 'Validators')
+            validators = []
+            
+            for validator_account, stake in validators_query:
+                validator_addr = validator_account.value
+                
+                # Check if validator has node identity info
+                try:
+                    identity_query = self.substrate.query('QxAi', 'NodeIdentities', [validator_addr])
+                    has_identity = identity_query.value is not None
+                except Exception:
+                    has_identity = False
+                
+                validators.append({
+                    'address': validator_addr,
+                    'stake': stake.value,
+                    'online': has_identity,  # Assume online if has node identity
+                    'challenges_processed': 0,  # Could be extended to track this
+                    'validations_done': 0       # Could be extended to track this
+                })
+            
+            return validators
+        except Exception as e:
+            print(f"❌ Error getting validators: {e}")
             return []
     
     async def get_worker_models(self, worker_address: str) -> List[Dict]:
@@ -220,24 +250,27 @@ class QXCustomer:
             print("🎯 QX Chain Customer Interface")
             print("="*60)
             print("1. 👥 List available workers")
-            print("2. 📝 Submit inference request")
-            print("3. 📊 Monitor my requests")
-            print("4. 🔍 Check specific request status")
-            print("5. 🚪 Exit")
+            print("2. 🛡️ List registered validators")
+            print("3. 📝 Submit inference request")
+            print("4. 📊 Monitor my requests")
+            print("5. 🔍 Check specific request status")
+            print("6. 🚪 Exit")
             print("-"*60)
             
             try:
-                choice = input("Select option (1-5): ").strip()
+                choice = input("Select option (1-6): ").strip()
                 
                 if choice == "1":
                     await self.list_workers()
                 elif choice == "2":
-                    await self.submit_request_interactive()
+                    await self.list_validators()
                 elif choice == "3":
-                    await self.monitor_requests()
+                    await self.submit_request_interactive()
                 elif choice == "4":
-                    await self.check_request_interactive()
+                    await self.monitor_requests()
                 elif choice == "5":
+                    await self.check_request_interactive()
+                elif choice == "6":
                     print("👋 Goodbye!")
                     break
                 else:
@@ -276,6 +309,35 @@ class QXCustomer:
                 if models:
                     model_list = ', '.join([f"{m['name']} (ID: {m['id']})" for m in models])
                     print(f"   📚 Available models: {model_list}")
+
+    async def list_validators(self):
+        """List all registered validators with their status"""
+        print("\n🔍 Fetching validators...")
+        validators = await self.get_validators()
+        
+        if not validators:
+            print("❌ No validators found or error fetching validators")
+            return
+        
+        print(f"\n🛡️ Found {len(validators)} registered validators:")
+        print("-"*90)
+        print(f"{'Address':<50} {'Status':<8} {'Stake':<10} {'Challenges':<10} {'Validations':<12}")
+        print("-"*90)
+        
+        for validator in validators:
+            status = "🟢 Online" if validator['online'] else "🔴 Offline"
+            stake_str = f"{validator['stake']:,}"
+            challenges_str = f"{validator['challenges_processed']}"
+            validations_str = f"{validator['validations_done']}"
+            
+            print(f"{validator['address']:<50} {status:<8} {stake_str:<10} {challenges_str:<10} {validations_str:<12}")
+            
+        print(f"\n📊 Network Summary:")
+        online_count = sum(1 for v in validators if v['online'])
+        total_stake = sum(v['stake'] for v in validators)
+        print(f"   Online validators: {online_count}/{len(validators)}")
+        print(f"   Total staked: {total_stake:,}")
+        print(f"   Network security: {'🟢 High' if online_count >= 3 else '🟡 Medium' if online_count >= 2 else '🔴 Low'}")
     
     async def submit_request_interactive(self):
         """Interactive request submission"""
@@ -296,7 +358,7 @@ class QXCustomer:
             print(f"{i+1}. {worker['address']} (Queue: {worker['queue_length']} requests)")
         
         try:
-            worker_idx = int(input("Select worker (number): ")) - 1
+            worker_idx = int(input(f"Select worker (1-{len(online_workers)}): ")) - 1
             if worker_idx < 0 or worker_idx >= len(online_workers):
                 print("❌ Invalid worker selection")
                 return
@@ -406,7 +468,7 @@ class QXCustomer:
 
 async def main():
     parser = argparse.ArgumentParser(description='QX Chain Customer Interface')
-    parser.add_argument('--chain', default='ws://localhost:9944', help='Chain endpoint')
+    parser.add_argument('--chain', default='ws://localhost:9933', help='Chain endpoint')
     parser.add_argument('--seed', default='//Alice', help='Customer account seed')
     
     args = parser.parse_args()
