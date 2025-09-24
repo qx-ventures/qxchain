@@ -18,7 +18,7 @@ from substrateinterface.exceptions import SubstrateRequestException
 
 class QXCustomer:
     def __init__(self, 
-                 chain_endpoint: str = "ws://localhost:9933",
+                 chain_endpoint: str = "ws://host.docker.internal:9933",
                  customer_seed: str = "//Alice"):
         
         self.substrate = SubstrateInterface(url=chain_endpoint)
@@ -468,7 +468,7 @@ class QXCustomer:
 
 async def main():
     parser = argparse.ArgumentParser(description='QX Chain Customer Interface')
-    parser.add_argument('--chain', default='ws://localhost:9933', help='Chain endpoint')
+    parser.add_argument('--chain', default='ws://host.docker.internal:9933', help='Chain endpoint')
     parser.add_argument('--seed', default='//Alice', help='Customer account seed')
     
     args = parser.parse_args()
