@@ -213,16 +213,16 @@ wait_for_service() {
 
 # Function to check if blockchain is already running
 check_blockchain_running() {
-    curl -s http://localhost:9933 > /dev/null 2>&1
+    curl -s http://host.docker.internal:9933 > /dev/null 2>&1
 }
 
 # Function to start blockchain node
 start_blockchain_node() {
-    # Always try to connect to ws://localhost:9933 first
-    echo -e "${BLUE}🔗 Checking for existing blockchain at ws://localhost:9933...${NC}"
+    # Always try to connect to ws://host.docker.internal:9933 first
+    echo -e "${BLUE}🔗 Checking for existing blockchain at ws://host.docker.internal:9933...${NC}"
     
     if check_blockchain_running; then
-        echo -e "${GREEN}✅ Found existing blockchain at ws://localhost:9933${NC}"
+        echo -e "${GREEN}✅ Found existing blockchain at ws://host.docker.internal:9933${NC}"
         echo -e "${BLUE}🔗 Connecting to existing blockchain (client-only mode)${NC}"
         return 0
     fi
@@ -285,7 +285,7 @@ start_worker() {
     echo -e "${CYAN}🤖 Starting worker component...${NC}"
     
     local worker_cmd="python3 /home/qxuser/scripts/ollama_worker.py \
-        --chain ws://localhost:9933 \
+        --chain ws://host.docker.internal:9933 \
         --ollama $OLLAMA_ENDPOINT \
         --seed \"$ACCOUNT_SEED\" \
         --no-node"
@@ -310,12 +310,12 @@ start_worker() {
 start_validator() {
     echo -e "${PURPLE}🛡️ Starting validator component...${NC}"
     
-    # Always use localhost:9933 for simplicity
-    local chain_endpoint="ws://localhost:9933"
+    # Always use host.docker.internal:9933 to connect to existing blockchain
+    local chain_endpoint="ws://host.docker.internal:9933"
     
     # Generate a unique peer ID for this validator
     local peer_id="validator_$(echo $ACCOUNT_SEED | tr -d '/' | tr '[:upper:]' '[:lower:]')_$(date +%s)"
-    local node_endpoint="ws://localhost:9933"
+    local node_endpoint="ws://host.docker.internal:9933"
     
     local validator_cmd="python3 /home/qxuser/scripts/validator.py \
         --chain $chain_endpoint \

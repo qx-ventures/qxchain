@@ -882,7 +882,7 @@ class QXValidator:
                     print(f"🛡️ Validator Status Check (Cycle {status_counter + 1})")
                     print(f"📅 Time: {asyncio.get_event_loop().time():.0f}")
                     print(f"✅ Registered: {self.registered}")
-                    print(f"🔗 Chain Connected: {self.chain is not None}")
+                    print(f"🔗 Chain Connected: {self.substrate is not None}")
                     print(f"📊 Processed Inferences: {len(self.processed_inferences)}")
                     print(f"{'='*50}")
                 
