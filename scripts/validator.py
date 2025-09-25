@@ -66,6 +66,22 @@ class QXValidator:
         """Register this node as a validator (requires sudo/governance)"""
         try:
             self._ensure_substrate_connection()
+            
+            # First check if already registered
+            try:
+                validator_result = self.substrate.query(
+                    module='QxAi',
+                    storage_function='Validators',
+                    params=[self.validator_address]
+                )
+                if validator_result and validator_result.value:
+                    print("ℹ️ Validator already registered. Continuing.")
+                    self.registered = True
+                    return True
+            except Exception as query_error:
+                # Storage might not exist yet, continue with registration attempt
+                pass
+            
             call = self.substrate.compose_call(
                 call_module='QxAi',
                 call_function='register_validator',
@@ -346,7 +362,7 @@ class QXValidator:
                 return {
                     'owner': 'unknown',
                     'model_hash': b'mock_hash',
-                    'name': 'zoo_assistant',
+                    'name': 'assistant',
                     'endpoint': 'http://localhost:8000/inference',
                     'active': True
                 }
@@ -364,7 +380,7 @@ class QXValidator:
             
             # Map model names to Ollama models
             ollama_model_map = {
-                'zoo_assistant': 'gemma3:1b',
+                'assistant': 'gemma3:1b',
                 'permits_assistant': 'gemma3:1b',
                 'parks_assistant': 'gemma3:1b'
             }
@@ -434,7 +450,7 @@ class QXValidator:
             model_name = model_info['name']
             
             test_prompts = {
-                'zoo_assistant': "What are the zoo's operating hours?",
+                'assistant': "Hello, how can you help me today?",
                 'permits_assistant': "How do I apply for a building permit?",
                 'parks_assistant': "What events are happening in the parks this week?"
             }
@@ -573,22 +589,22 @@ class QXValidator:
         print("🎮 Starting Interactive Validator Mode...")
         print("🎯 You can manually review and validate/challenge inferences")
         
-        try:
-            while True:
-                print("\n" + "="*60)
-                print("🛡️ QX Chain Validator Interactive Mode")
-                print("="*60)
-                print("1. 📋 Check pending inferences")
-                print("2. 🔍 Show specific inference details")
-                print("3. ✅ Validate specific inference")
-                print("4. ❌ Challenge specific inference")
-                print("5. 🔄 Process all pending inferences")
-                print("6. ⚖️ Show challenge consensus status")
-                print("7. 📊 Show validator status")
-                print("8. 🔄 Refresh validator registration")
-                print("9. 🚪 Exit interactive mode")
-                print("-" * 60)
-                
+        while True:
+            print("\n" + "="*60)
+            print("🛡️ QX Chain Validator Interactive Mode")
+            print("="*60)
+            print("1. 📋 Check pending inferences")
+            print("2. 🔍 Show specific inference details")
+            print("3. ✅ Validate specific inference")
+            print("4. ❌ Challenge specific inference")
+            print("5. 🔄 Process all pending inferences")
+            print("6. ⚖️ Show challenge consensus status")
+            print("7. 📊 Show validator status")
+            print("8. 🔄 Refresh validator registration")
+            print("9. 🚪 Exit interactive mode")
+            print("-" * 60)
+            
+            try:
                 choice = input("Select option (1-9): ").strip()
                 
                 if choice == "1":
@@ -613,12 +629,12 @@ class QXValidator:
                 else:
                     print("❌ Invalid option. Please choose 1-9.")
                     
-        except KeyboardInterrupt:
-            print("\n🛑 Interactive mode interrupted")
-        except Exception as e:
-            print(f"❌ Interactive mode error: {e}")
-        finally:
-            print("🎮 Interactive mode stopped")
+            except KeyboardInterrupt:
+                print("\n👋 Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+                # Continue the loop instead of crashing
     
     async def show_pending_inferences(self):
         """Show all pending inferences"""
@@ -967,8 +983,6 @@ async def main():
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
     parser.add_argument('--seed', default='//Charlie', help='Validator account seed')
     parser.add_argument('--interval', type=int, default=10, help='Validation interval in seconds')
-    parser.add_argument('--register', action='store_true', help='Register as validator (requires sudo)')
-    parser.add_argument('--auto-mode', action='store_true', help='Start in automatic validation mode (default: interactive)')
     parser.add_argument('--peer-id', default=None, help='Node peer ID for blockchain network (deprecated, auto-generated)')
     parser.add_argument('--node-endpoint', default='http://localhost:9966', help='Node endpoint (deprecated, auto-managed)')
     parser.add_argument('--no-node', action='store_true', help='Don\'t start blockchain node (use external node)')
@@ -1025,26 +1039,23 @@ async def main():
             print("❌ Failed to connect to chain. Exiting.")
             return
         
-        # Register validator if requested
-        if args.register:
+        # Always attempt to register validator if not already registered
+        if not validator.registered:
+            print("🔄 Attempting to register validator...")
             if await validator.register_validator():
                 print("✅ Validator registration complete")
             else:
                 print("❌ Failed to register validator. Continuing anyway...")
+        else:
+            print("✅ Validator already registered")
         
         # Register node identity if peer_id provided (legacy support)
         if args.peer_id:
             print(f"🔗 Registering validator node identity...")
             await validator.register_node_identity(args.peer_id, args.node_endpoint, 1)  # 1 = Validator type
         
-        if args.auto_mode:
-            print("🔄 Starting automatic validation mode...")
-            # Run validation loop
-            await validator.start_validation_loop(args.interval)
-        else:
-            print("🎮 Starting interactive mode (default)...")
-            # Run interactive mode
-            await validator.interactive_mode()
+        print("🎮 Starting validator in interactive mode...")
+        await validator.interactive_mode()
                 
     except KeyboardInterrupt:
         print("\n🛑 Received interrupt signal")

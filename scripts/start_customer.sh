@@ -57,8 +57,8 @@ Examples:
     $0 --env ./venv                            # Use specific Python environment
 
 First start some nodes:
-    ./start_node.sh worker --seed //Bob --setup-zoo
-    ./start_node.sh validator --seed //Charlie --register
+    ./start_node.sh worker --seed //Bob
+    ./start_node.sh validator --seed //Charlie
 
 Customer Seeds:
     //Alice             Default customer account
@@ -128,8 +128,8 @@ if [ -z "$CHAIN_ENDPOINT" ]; then
         print_error "No QX Chain nodes found running"
         echo ""
         echo "Please start a node first:"
-        echo "  ./start_node.sh worker --seed //Bob --setup-zoo"
-        echo "  ./start_node.sh validator --seed //Charlie --register"
+        echo "  ./start_node.sh worker --seed //Bob"
+        echo "  ./start_node.sh validator --seed //Charlie"
         echo ""
         echo "Or specify a chain endpoint manually:"
         echo "  $0 --chain ws://localhost:PORT"

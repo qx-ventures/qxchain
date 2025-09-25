@@ -95,9 +95,8 @@ NODE_TYPE="${NODE_TYPE:-worker}"
 CHAIN_NAME="${CHAIN_NAME:-dev}"
 ACCOUNT_SEED="${ACCOUNT_SEED:-//Bob}"
 OLLAMA_ENDPOINT="${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}"
-SETUP_ZOO="${SETUP_ZOO:-true}"
+# Workers always setup model automatically
 INTERACTIVE="${INTERACTIVE:-false}"
-AUTO_REGISTER="${AUTO_REGISTER:-true}"
 AUTO_MODE="${AUTO_MODE:-true}"
 BOOTNODES="${BOOTNODES:-}"
 
@@ -119,26 +118,6 @@ while [[ $# -gt 0 ]]; do
         --ollama)
             OLLAMA_ENDPOINT="$2"
             shift 2
-            ;;
-        --setup-zoo)
-            SETUP_ZOO=true
-            shift
-            ;;
-        --no-zoo)
-            SETUP_ZOO=false
-            shift
-            ;;
-        --interactive)
-            INTERACTIVE=true
-            shift
-            ;;
-        --auto-register)
-            AUTO_REGISTER=true
-            shift
-            ;;
-        --auto-mode)
-            AUTO_MODE=true
-            shift
             ;;
         --bootnodes)
             BOOTNODES="$2"
@@ -172,20 +151,10 @@ show_usage() {
     echo "  --chain CHAIN              # Chain spec (default: dev)"
     echo "  --ollama URL               # Ollama endpoint (default: http://host.docker.internal:11434)"
     echo "  --bootnodes NODES          # Bootnode addresses"
-    echo "  --interactive              # Interactive mode"
-    echo ""
-    echo "Worker Options:"
-    echo "  --setup-zoo                # Setup zoo model (default: true)"
-    echo "  --no-zoo                   # Don't setup zoo model"
-    echo ""
-    echo "Validator Options:"
-    echo "  --auto-register            # Auto-register as validator"
-    echo "  --auto-mode                # Automatic validation mode"
-    echo ""
     echo "Examples:"
-    echo "  docker run -p 9944:9944 qxchain-node"
+    echo "  docker run -p 9944:9944 qxchain-node --type worker --seed //Bob"
     echo "  docker run -p 9944:9944 qxchain-node --type validator --seed //Charlie"
-    echo "  docker run -p 9944:9944 qxchain-node --type both --seed //Alice --auto-register"
+    echo "  docker run -p 9944:9944 qxchain-node --type both --seed //Alice"
 }
 
 # Function to wait for service
@@ -290,10 +259,6 @@ start_worker() {
         --seed \"$ACCOUNT_SEED\" \
         --no-node"
     
-    if [ "$SETUP_ZOO" = "true" ]; then
-        worker_cmd="$worker_cmd --setup-zoo"
-    fi
-    
     # Workers run in auto-mode by default (queue listener)
     
     echo -e "${BLUE}📋 Worker command: $worker_cmd${NC}"
@@ -325,19 +290,23 @@ start_validator() {
         --peer-id \"$peer_id\" \
         --node-endpoint \"$node_endpoint\""
     
-    # Always auto-register validators
-    validator_cmd="$validator_cmd --register"
-    
-    # Always use auto-mode for validators (continuous validation loop)
-    validator_cmd="$validator_cmd --auto-mode"
-    
     echo -e "${BLUE}📋 Validator command: $validator_cmd${NC}"
     
     cd /home/qxuser/scripts
-    eval $validator_cmd &
-    VALIDATOR_PID=$!
     
-    echo -e "${GREEN}✅ Validator started (PID: $VALIDATOR_PID)${NC}"
+    # For validator-only mode, run in foreground for interactive access
+    if [ "$NODE_TYPE" = "validator" ]; then
+        echo -e "${YELLOW}💡 Validator-only mode: Running in foreground for interactive access${NC}"
+        echo -e "${YELLOW}💡 Use Ctrl+C to stop gracefully${NC}"
+        eval $validator_cmd
+    else
+        # For "both" mode, run in background
+        echo -e "${YELLOW}💡 Combined mode: Starting validator in background${NC}"
+        eval $validator_cmd &
+        VALIDATOR_PID=$!
+        echo -e "${GREEN}✅ Validator started (PID: $VALIDATOR_PID)${NC}"
+    fi
+    
     return 0
 }
 
@@ -374,11 +343,9 @@ echo -e "${BLUE}📋 Node Type: $NODE_TYPE${NC}"
 echo -e "${BLUE}📋 Account: $ACCOUNT_SEED${NC}"
 echo -e "${BLUE}📋 Chain: $CHAIN_NAME${NC}"
 echo -e "${BLUE}📋 Ollama: $OLLAMA_ENDPOINT${NC}"
-echo -e "${BLUE}📋 Zoo Model: $SETUP_ZOO${NC}"
-echo -e "${BLUE}📋 Interactive: $INTERACTIVE${NC}"
+echo -e "${BLUE}📋 Worker Mode: Automatic Queue Listener${NC}"
 if [ "$NODE_TYPE" = "validator" ] || [ "$NODE_TYPE" = "both" ]; then
-    echo -e "${BLUE}📋 Auto Register: $AUTO_REGISTER${NC}"
-    echo -e "${BLUE}📋 Auto Mode: $AUTO_MODE${NC}"
+    echo -e "${BLUE}📋 Validation Mode: Interactive${NC}"
 fi
 echo ""
 
@@ -414,17 +381,20 @@ case "$NODE_TYPE" in
         ;;
 esac
 
-echo ""
-echo -e "${GREEN}🎉 QX Chain node is running!${NC}"
-echo -e "${BLUE}📊 Blockchain WebSocket: ws://localhost:9944${NC}"
-echo -e "${BLUE}📊 Blockchain HTTP RPC: http://localhost:9933${NC}"
-echo -e "${BLUE}📄 Logs directory: /home/qxuser/logs/${NC}"
-echo -e "${YELLOW}💡 Press Ctrl+C to stop gracefully${NC}"
+# Only show final messages for non-validator modes
+if [ "$NODE_TYPE" != "validator" ]; then
+    echo ""
+    echo -e "${GREEN}🎉 QX Chain node is running!${NC}"
+    echo -e "${BLUE}📊 Blockchain WebSocket: ws://localhost:9944${NC}"
+    echo -e "${BLUE}📊 Blockchain HTTP RPC: http://localhost:9933${NC}"
+    echo -e "${BLUE}📄 Logs directory: /home/qxuser/logs/${NC}"
+    echo -e "${YELLOW}💡 Press Ctrl+C to stop gracefully${NC}"
 
-# Keep the script running and wait for signals
-while true; do
-    sleep 1
-done
+    # Keep the script running and wait for signals
+    while true; do
+        sleep 1
+    done
+fi
 EOF
 
 RUN chmod +x /home/qxuser/start_node.sh
@@ -437,10 +407,6 @@ ENV NODE_TYPE=worker
 ENV CHAIN_NAME=dev
 ENV ACCOUNT_SEED=//Bob
 ENV OLLAMA_ENDPOINT=http://host.docker.internal:11434
-ENV SETUP_ZOO=true
-ENV INTERACTIVE=false
-ENV AUTO_REGISTER=true
-ENV AUTO_MODE=true
 ENV BOOTNODES=""
 
 # Health check

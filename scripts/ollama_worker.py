@@ -4,7 +4,7 @@ QX Chain Ollama Worker Script
 
 This script runs an ML worker node that:
 1. Registers as a worker on the QX Chain
-2. Registers ML models (e.g., zoo assistant)
+2. Registers ML models (e.g., zoo assistant...)
 3. Listens for inference requests
 4. Runs inference using Ollama
 5. Submits results to the chain
@@ -367,13 +367,13 @@ class OllamaWorker:
         return output
     
     
-    async def setup_zoo_model(self):
-        """Setup a zoo assistant model with deterministic parameters"""
-        print("🔧 Setting up zoo assistant model...")
+    async def setup_model(self):
+        """Setup a model with deterministic parameters"""
+        print("🔧 Setting up model...")
         print(f"📋 Current models count: {len(self.models)}")
         
         model_id = await self.register_model(
-            model_name="zoo_assistant",
+            model_name="assistant",
             ollama_model="gemma3:1b",  # Lightweight model for testing
             endpoint="terminal",  # Terminal-only mode
             seed=42,  # Fixed seed for deterministic inference
@@ -382,12 +382,12 @@ class OllamaWorker:
         )
         
         if model_id is not None:
-            print(f"✅ Zoo assistant model setup complete (ID: {model_id})")
+            print(f"✅ Model setup complete (ID: {model_id})")
             print(f"💡 Model ready for deterministic inference requests")
             print(f"📋 Total models registered: {len(self.models)}")
             print(f"📋 Available models: {list(self.models.keys())}")
         else:
-            print("❌ Failed to setup zoo model")
+            print("❌ Failed to setup model")
         
         return model_id
     
@@ -1042,7 +1042,7 @@ async def main():
     parser.add_argument('--chain', default='ws://localhost:9933', help='Chain endpoint')
     parser.add_argument('--ollama', default='http://localhost:11434', help='Ollama endpoint')
     parser.add_argument('--seed', default='//Bob', help='Worker account seed')
-    parser.add_argument('--setup-zoo', action='store_true', help='Setup zoo assistant model')
+    parser.add_argument('--setup-model', action='store_true', help='Setup model (always enabled)')
     parser.add_argument('--interactive', action='store_true', help='Start in interactive mode')
     parser.add_argument('--peer-id', default=None, help='Node peer ID for blockchain network (deprecated, auto-generated)')
     parser.add_argument('--node-endpoint', default='http://localhost:9933', help='Node endpoint (deprecated, auto-managed)')
@@ -1104,8 +1104,8 @@ async def main():
             print("❌ Failed to register worker. Exiting.")
             return
         
-        if args.setup_zoo:
-            await worker.setup_zoo_model()
+        # Always setup model by default
+        await worker.setup_model()
         
         # Register node identity if peer_id provided (legacy support)
         if args.peer_id:
@@ -1114,24 +1114,9 @@ async def main():
         
         print("✅ Worker initialization complete!")
         
-        if args.interactive:
-            print("🎮 Starting interactive mode...")
-            try:
-                await worker.interactive_mode()
-            except KeyboardInterrupt:
-                print("\n🛑 Shutting down worker...")
-        else:
-            print("🎧 Starting queue listener...")
-            
-            # Start queue listener
-            try:
-                await worker.queue_listener()
-            except KeyboardInterrupt:
-                print("\n🛑 Shutting down worker...")
-                worker.stop_queue_listener()
-            except Exception as e:
-                print(f"❌ Worker error: {e}")
-                worker.stop_queue_listener()
+        print("🎧 Starting worker with automatic queue listening...")
+        # Run only queue listener
+        await worker.queue_listener()
                 
     except Exception as e:
         print(f"❌ Fatal error: {e}")

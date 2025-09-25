@@ -121,32 +121,25 @@ show_usage() {
     echo ""
     echo "Worker Options:"
     echo "  --seed SEED              # Account seed (default: //Bob)"
-    echo "  --setup-zoo              # Setup zoo model"
-    echo "  --interactive            # Interactive mode (default: queue listener)"
     echo ""
     echo "Validator Options:"
     echo "  --seed SEED              # Account seed (default: //Charlie)"
-    echo "  --register               # Auto-register as validator"
-    echo "  --auto-mode              # Automatic validation mode (default: interactive)"
     echo ""
     echo "Examples:"
     echo "  $0 worker                                    # Basic worker with //Bob"
-    echo "  $0 worker --seed //Dave --setup-zoo         # Worker with Dave account and zoo model"
-    echo "  $0 validator --seed //Alice --register      # Validator with Alice account, auto-register"
-    echo "  $0 validator --auto-mode                     # Auto-validating validator"
+    echo "  $0 worker --seed //Dave                      # Worker with Dave account"
+    echo "  $0 validator --seed //Alice      # Validator with Alice account
     echo ""
     echo "Network Building:"
-    echo "  Terminal 1: $0 worker --seed //Bob --setup-zoo"
+    echo "  Terminal 1: $0 worker --seed //Bob"
     echo "  Terminal 2: $0 worker --seed //Dave"
-    echo "  Terminal 3: $0 validator --seed //Charlie --register"
-    echo "  Terminal 4: $0 validator --seed //Alice --auto-mode"
+    echo "  Terminal 3: $0 validator --seed //Charlie"
+    echo "  Terminal 4: $0 validator --seed //Alice"
 }
 
 # Function to start worker
 start_worker() {
     local seed="//Bob"
-    local setup_zoo=false
-    local interactive=false
     
     # Parse worker-specific options
     shift # Remove 'worker' from args
@@ -155,14 +148,6 @@ start_worker() {
             --seed)
                 seed="$2"
                 shift 2
-                ;;
-            --setup-zoo)
-                setup_zoo=true
-                shift
-                ;;
-            --interactive)
-                interactive=true
-                shift
                 ;;
             *)
                 echo -e "${RED}❌ Unknown worker option: $1${NC}"
@@ -177,28 +162,14 @@ start_worker() {
     
     echo -e "${CYAN}🤖 Starting Worker Node${NC}"
     echo -e "${BLUE}═══════════════════════════${NC}"
-    # Auto-enable zoo model if no specific setup specified
-    if [ "$setup_zoo" = false ] && [[ "$@" != *"--setup-zoo"* ]]; then
-        setup_zoo=true
-        echo -e "${CYAN}💡 Auto-enabling zoo model for worker${NC}"
-    fi
     
     echo -e "${BLUE}📋 Node Name: $node_name${NC}"
     echo -e "${BLUE}📋 Account: $seed${NC}"
-    echo -e "${BLUE}📋 Zoo Model: $([ "$setup_zoo" = true ] && echo "Yes" || echo "No")${NC}"
-    echo -e "${BLUE}📋 Mode: $([ "$interactive" = true ] && echo "Interactive" || echo "Queue Listener")${NC}"
+    echo -e "${BLUE}📋 Mode: Automatic Queue Listener${NC}"
     echo ""
     
     # Build command
     local cmd="python ollama_worker.py --seed=\"$seed\" --node-name=\"$node_name\""
-    
-    if [ "$setup_zoo" = true ]; then
-        cmd="$cmd --setup-zoo"
-    fi
-    
-    if [ "$interactive" = true ]; then
-        cmd="$cmd --interactive"
-    fi
     
     # Check and start Ollama for workers
     echo -e "${BLUE}🔧 Preparing Ollama for worker...${NC}"
@@ -226,8 +197,6 @@ start_worker() {
 # Function to start validator
 start_validator() {
     local seed="//Charlie"
-    local register=false
-    local auto_mode=false
     
     # Parse validator-specific options
     shift # Remove 'validator' from args
@@ -236,14 +205,6 @@ start_validator() {
             --seed)
                 seed="$2"
                 shift 2
-                ;;
-            --register)
-                register=true
-                shift
-                ;;
-            --auto-mode)
-                auto_mode=true
-                shift
                 ;;
             *)
                 echo -e "${RED}❌ Unknown validator option: $1${NC}"
@@ -260,20 +221,11 @@ start_validator() {
     echo -e "${BLUE}═════════════════════════════${NC}"
     echo -e "${BLUE}📋 Node Name: $node_name${NC}"
     echo -e "${BLUE}📋 Account: $seed${NC}"
-    echo -e "${BLUE}📋 Register: $([ "$register" = true ] && echo "Yes" || echo "No")${NC}"
-    echo -e "${BLUE}📋 Mode: $([ "$auto_mode" = true ] && echo "Automatic" || echo "Interactive")${NC}"
+    echo -e "${BLUE}📋 Mode: Interactive${NC}"
     echo ""
     
     # Build command
     local cmd="python validator.py --seed=\"$seed\" --node-name=\"$node_name\""
-    
-    if [ "$register" = true ]; then
-        cmd="$cmd --register"
-    fi
-    
-    if [ "$auto_mode" = true ]; then
-        cmd="$cmd --auto-mode"
-    fi
     
     echo -e "${YELLOW}🚀 Starting validator with integrated blockchain node...${NC}"
     echo -e "${BLUE}📋 Command: $cmd${NC}"
