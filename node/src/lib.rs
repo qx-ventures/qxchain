@@ -19,3 +19,6 @@ pub mod chain_spec;
 pub(crate) mod cli;
 pub mod rpc;
 pub mod service;
+pub mod ai_client;
+pub mod ml_worker;
+pub mod ml_validator;

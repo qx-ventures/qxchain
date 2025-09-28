@@ -111,19 +111,36 @@ pub fn run() -> sc_cli::Result<()> {
 		Some(Subcommand::ChainInfo(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| {
-				cmd.run::<minimal_template_runtime::interface::OpaqueBlock>(&config)
+				cmd.run::<qxchain_runtime::interface::OpaqueBlock>(&config)
 			})
 		},
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
+			let node_role = cli.node_role.clone();
+			let ai_config = crate::ai_client::AiConfig::new(
+				cli.ai_endpoint.clone(),
+				cli.ai_provider.clone(),
+				cli.ai_api_key.clone(),
+				cli.ai_model.clone(),
+			);
 			runner.run_node_until_exit(|config| async move {
 				match config.network.network_backend.unwrap_or_default() {
 					sc_network::config::NetworkBackendType::Libp2p =>
-						service::new_full::<sc_network::NetworkWorker<_, _>>(config, cli.consensus)
+						service::new_full::<sc_network::NetworkWorker<_, _>>(
+							config,
+							cli.consensus,
+							node_role.clone(),
+							ai_config.clone()
+						)
 							.map_err(sc_cli::Error::Service),
 					sc_network::config::NetworkBackendType::Litep2p => service::new_full::<
 						sc_network::Litep2pNetworkBackend,
-					>(config, cli.consensus)
+					>(
+						config,
+						cli.consensus,
+						node_role,
+						ai_config
+					)
 					.map_err(sc_cli::Error::Service),
 				}
 			})

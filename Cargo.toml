@@ -1,23 +1,22 @@
 [workspace.package]
 license = "MIT-0"
-authors = ["Parity Technologies <admin@parity.io>"]
-homepage = "https://paritytech.github.io/polkadot-sdk/"
-repository = "https://github.com/paritytech/polkadot-sdk-minimal-template.git"
+authors = ["QX Ventures <info@qx.ventures>"]
+homepage = "https://qx.ventures/"
+repository = "https://github.com/qx-ventures/qxchain.git"
 edition = "2021"
 
 [workspace]
-default-members = ["pallets/template", "runtime"]
+default-members = ["node", "runtime"]
 members = [
     "node",
-    "pallets/template",
-    "pallets/pallet-qx-ai",
+    "pallets/pallet-ml-inference",
+    "pallets/pallet-ml-models",
     "runtime",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-minimal-template-runtime = { path = "./runtime", default-features = false }
-pallet-minimal-template = { path = "./pallets/template", default-features = false }
+qxchain-runtime = { path = "./runtime", default-features = false }
 clap = { version = "4.5.13" }
 docify = { version = "0.2.9" }
 futures = { version = "0.3.31" }

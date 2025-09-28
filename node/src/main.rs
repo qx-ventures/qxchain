@@ -23,6 +23,9 @@ mod cli;
 mod command;
 mod rpc;
 mod service;
+mod ai_client;
+mod ml_worker;
+mod ml_validator;
 
 fn main() -> polkadot_sdk::sc_cli::Result<()> {
 	command::run()

@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A minimal runtime that includes the template [`pallet`](`pallet_minimal_template`).
+//! QX Chain runtime with ML inference and model management pallets.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -165,13 +165,13 @@ mod runtime {
 	#[runtime::pallet_index(4)]
 	pub type TransactionPayment = pallet_transaction_payment::Pallet<Runtime>;
 
-	/// A minimal pallet template.
+	/// ML Inference pallet for decentralized inference validation
 	#[runtime::pallet_index(5)]
-	pub type Template = pallet_minimal_template::Pallet<Runtime>;
+	pub type MlInference = pallet_ml_inference::Pallet<Runtime>;
 
-	/// QX opML pallet for machine learning operations
+	/// ML Models pallet for model registry and management
 	#[runtime::pallet_index(6)]
-	pub type QxAi = pallet_qx_ai::Pallet<Runtime>;
+	pub type MlModels = pallet_ml_models::Pallet<Runtime>;
 }
 
 parameter_types! {
@@ -211,11 +211,8 @@ impl pallet_transaction_payment::Config for Runtime {
 	type LengthToFee = FixedFee<1, <Self as pallet_balances::Config>::Balance>;
 }
 
-// Implements the types required for the template pallet.
-impl pallet_minimal_template::Config for Runtime {}
-
-// Implements the types required for the custom opML pallet.
-impl pallet_qx_ai::Config for Runtime {
+// Implements the types required for the ML Inference pallet.
+impl pallet_ml_inference::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MinWorkerStake = ConstU64<900>; // 900 units
@@ -223,6 +220,13 @@ impl pallet_qx_ai::Config for Runtime {
 	type ChallengePeriod = ConstU32<100>; // 100 blocks
 	type SlashThreshold = ConstU32<51>; // 51% majority
 	type MaxQueueSize = ConstU32<100>; // Maximum 100 requests per worker queue
+}
+
+// Implements the types required for the ML Models pallet.
+impl pallet_ml_models::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type MaxModelsPerOwner = ConstU32<10>; // Maximum 10 models per owner
+	type MaxTotalModels = ConstU32<1000>; // Maximum 1000 total models in system
 }
 
 type Block = frame::runtime::types_common::BlockOf<Runtime, TxExtension>;
@@ -363,4 +367,19 @@ pub mod interface {
 	pub type Hash = <Runtime as frame_system::Config>::Hash;
 	pub type Balance = <Runtime as pallet_balances::Config>::Balance;
 	pub type MinimumBalance = <Runtime as pallet_balances::Config>::ExistentialDeposit;
+
+	// Export types needed for transaction creation
+	pub use crate::RuntimeCall;
+	pub type UncheckedExtrinsic = polkadot_sdk::sp_runtime::generic::UncheckedExtrinsic<
+		<Runtime as frame_system::Config>::AccountId,
+		RuntimeCall,
+		polkadot_sdk::sp_runtime::MultiSignature,
+		super::TxExtension,
+	>;
+	pub type SignedExtra = super::TxExtension;
+	pub type SignedPayload = polkadot_sdk::sp_runtime::generic::SignedPayload<RuntimeCall, SignedExtra>;
+
+	// Re-export pallet types for ML functionality
+	pub use pallet_ml_inference;
+	pub use pallet_ml_models;
 }

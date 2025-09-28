@@ -1,6 +1,6 @@
 [package]
 name = "qxchain"
-description = "A minimal Substrate-based Substrate node, ready for hacking."
+description = "A QX Chain Substrate-based Substrate node"
 version = "0.1.0"
 license = "Unlicense"
 authors.workspace = true
@@ -19,8 +19,16 @@ docify = { workspace = true }
 futures = { features = ["thread-pool"], workspace = true }
 futures-timer = { workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
-minimal-template-runtime.workspace = true
+qxchain-runtime.workspace = true
 polkadot-sdk = { workspace = true, features = ["experimental", "node"] }
+codec = { workspace = true }
+
+# ML and async dependencies
+tokio = { version = "1.32", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
 
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }
@@ -28,6 +36,6 @@ polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }
 [features]
 default = ["std"]
 std = [
-	"minimal-template-runtime/std",
+	"qxchain-runtime/std",
 	"polkadot-sdk/std",
 ]

@@ -1,4 +1,6 @@
-//! QX opML pallet - Decentralized AI inference validation with staking and slashing
+//! ML Inference Pallet - Decentralized machine learning inference validation with staking and slashing
+//!
+//! This pallet manages ML inference requests, worker/validator coordination, and consensus-based validation.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

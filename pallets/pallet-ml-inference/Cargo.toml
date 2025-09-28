@@ -1,6 +1,7 @@
 [package]
-name = "pallet-qx-ai"
+name = "pallet-ml-inference"
 version = "0.1.0"
+description = "Machine Learning inference validation pallet with staking and slashing"
 license.workspace = true
 authors.workspace = true
 homepage.workspace = true

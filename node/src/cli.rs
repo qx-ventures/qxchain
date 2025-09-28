@@ -18,6 +18,29 @@
 use polkadot_sdk::{sc_cli::RunCmd, *};
 
 #[derive(Debug, Clone)]
+pub enum NodeRole {
+	/// ML Worker node that processes inference requests
+	Worker,
+	/// Validator node that verifies inference results
+	Validator,
+	/// Both Worker and Validator - processes requests and validates others
+	WorkerValidator,
+}
+
+impl std::str::FromStr for NodeRole {
+	type Err = String;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.to_lowercase().as_str() {
+			"worker" => Ok(NodeRole::Worker),
+			"validator" => Ok(NodeRole::Validator),
+			"worker-validator" | "both" => Ok(NodeRole::WorkerValidator),
+			_ => Err("Invalid node role. Must be: worker, validator, or worker-validator".into()),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
 pub enum Consensus {
 	ManualSeal(u64),
 	InstantSeal,
@@ -47,6 +70,22 @@ pub struct Cli {
 
 	#[clap(long, default_value = "manual-seal-3000")]
 	pub consensus: Consensus,
+
+	/// The role of this node (worker, validator, or worker-validator)
+	#[clap(long, default_value = "worker")]
+	pub node_role: NodeRole,
+
+	/// AI API endpoint (OpenAI-compatible API)
+	#[clap(long, default_value = "http://localhost:11434")]
+	pub ai_endpoint: String,
+
+	/// AI API key (optional)
+	#[clap(long, env = "AI_API_KEY")]
+	pub ai_api_key: Option<String>,
+
+	/// AI model to use (e.g., gpt-4, gemma:2b, mistral:7b)
+	#[clap(long, default_value = "gemma3:1b")]
+	pub ai_model: String,
 
 	#[clap(flatten)]
 	pub run: RunCmd,

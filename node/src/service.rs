@@ -17,7 +17,7 @@
 
 use crate::cli::Consensus;
 use futures::FutureExt;
-use minimal_template_runtime::{interface::OpaqueBlock as Block, RuntimeApi};
+use qxchain_runtime::{interface::OpaqueBlock as Block, RuntimeApi};
 use polkadot_sdk::{
 	sc_client_api::backend::Backend,
 	sc_executor::WasmExecutor,
@@ -110,6 +110,8 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Hash>>(
 	config: Configuration,
 	consensus: Consensus,
+	node_role: crate::cli::NodeRole,
+	ai_config: crate::ai_client::AiConfig,
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -181,6 +183,9 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 
 	let prometheus_registry = config.prometheus_registry().cloned();
 
+	// Clone backend for later use in ML tasks
+	let backend_for_ml = backend.clone();
+
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		network,
 		client: client.clone(),
@@ -209,8 +214,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 			let params = sc_consensus_manual_seal::InstantSealParams {
 				block_import: client.clone(),
 				env: proposer,
-				client,
-				pool: transaction_pool,
+				client: client.clone(),
+				pool: transaction_pool.clone(),
 				select_chain,
 				consensus_data_provider: None,
 				create_inherent_data_providers: move |_, ()| async move {
@@ -244,8 +249,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 			let params = sc_consensus_manual_seal::ManualSealParams {
 				block_import: client.clone(),
 				env: proposer,
-				client,
-				pool: transaction_pool,
+				client: client.clone(),
+				pool: transaction_pool.clone(),
 				select_chain,
 				commands_stream: Box::pin(commands_stream),
 				consensus_data_provider: None,
@@ -262,6 +267,94 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 			);
 		},
 		_ => {},
+	}
+
+	// Spawn ML worker/validator tasks based on node role
+	{
+		use crate::cli::NodeRole;
+		use polkadot_sdk::sp_core::crypto::Pair;
+
+		// Get or generate keypair for this node
+		let seed = "//Alice"; // Use a default seed for now, should use proper key management
+		let keypair = polkadot_sdk::sp_core::sr25519::Pair::from_string(seed, None)
+			.expect("Failed to create keypair");
+
+		match node_role {
+			NodeRole::Worker => {
+				let worker = crate::ml_worker::MlWorker::new(
+					client.clone(),
+					backend_for_ml.clone(),
+					ai_config,
+					keypair,
+					transaction_pool.clone(),
+				);
+
+				task_manager.spawn_essential_handle().spawn(
+					"ml-worker",
+					None,
+					Box::pin(async move {
+						worker.start().await;
+					}),
+				);
+
+				log::info!("🤖 ML Worker task spawned");
+			},
+			NodeRole::Validator => {
+				let validator = crate::ml_validator::MlValidator::new(
+					client.clone(),
+					backend_for_ml.clone(),
+					ai_config,
+					keypair,
+					transaction_pool.clone(),
+				);
+
+				task_manager.spawn_essential_handle().spawn(
+					"ml-validator",
+					None,
+					Box::pin(async move {
+						validator.start().await;
+					}),
+				);
+
+				log::info!("🛡️ ML Validator task spawned");
+			},
+			NodeRole::WorkerValidator => {
+				// Spawn both worker and validator tasks
+				let worker = crate::ml_worker::MlWorker::new(
+					client.clone(),
+					backend_for_ml.clone(),
+					ai_config.clone(),
+					keypair.clone(),
+					transaction_pool.clone(),
+				);
+
+				let validator = crate::ml_validator::MlValidator::new(
+					client.clone(),
+					backend_for_ml.clone(),
+					ai_config,
+					keypair,
+					transaction_pool.clone(),
+				);
+
+				task_manager.spawn_essential_handle().spawn(
+					"ml-worker",
+					None,
+					Box::pin(async move {
+						worker.start().await;
+					}),
+				);
+
+				task_manager.spawn_essential_handle().spawn(
+					"ml-validator",
+					None,
+					Box::pin(async move {
+						validator.start().await;
+					}),
+				);
+
+				log::info!("🤖🛡️ ML Worker and Validator tasks spawned");
+			},
+		}
 	}
 
 	Ok(task_manager)
