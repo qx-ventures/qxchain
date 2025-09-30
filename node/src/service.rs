@@ -275,7 +275,12 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 		use polkadot_sdk::sp_core::crypto::Pair;
 
 		// Get or generate keypair for this node
-		let seed = "//Alice"; // Use a default seed for now, should use proper key management
+		// Use Bob for worker since Bob is registered on-chain
+		let seed = if matches!(node_role, NodeRole::Worker) {
+			"//Bob"
+		} else {
+			"//Alice"
+		};
 		let keypair = polkadot_sdk::sp_core::sr25519::Pair::from_string(seed, None)
 			.expect("Failed to create keypair");
 
@@ -287,6 +292,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 					ai_config,
 					keypair,
 					transaction_pool.clone(),
+					format!("worker-{}", std::process::id()),  // peer_id
+					"ws://127.0.0.1:9945".to_string(),        // endpoint
 				);
 
 				task_manager.spawn_essential_handle().spawn(
@@ -306,6 +313,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 					ai_config,
 					keypair,
 					transaction_pool.clone(),
+					format!("validator-{}", std::process::id()),  // peer_id
+					"ws://127.0.0.1:9946".to_string(),           // endpoint
 				);
 
 				task_manager.spawn_essential_handle().spawn(
@@ -326,6 +335,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 					ai_config.clone(),
 					keypair.clone(),
 					transaction_pool.clone(),
+					format!("worker-validator-{}", std::process::id()),  // peer_id
+					"ws://127.0.0.1:9947".to_string(),                   // endpoint
 				);
 
 				let validator = crate::ml_validator::MlValidator::new(
@@ -334,6 +345,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 					ai_config,
 					keypair,
 					transaction_pool.clone(),
+					format!("worker-validator-{}", std::process::id()),  // peer_id (same as worker)
+					"ws://127.0.0.1:9947".to_string(),                   // endpoint (same as worker)
 				);
 
 				task_manager.spawn_essential_handle().spawn(

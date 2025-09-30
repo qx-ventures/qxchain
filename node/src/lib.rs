@@ -22,3 +22,4 @@ pub mod service;
 pub mod ai_client;
 pub mod ml_worker;
 pub mod ml_validator;
+pub mod node_identity;

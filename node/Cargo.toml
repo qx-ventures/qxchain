@@ -22,6 +22,7 @@ jsonrpsee = { features = ["server"], workspace = true }
 qxchain-runtime.workspace = true
 polkadot-sdk = { workspace = true, features = ["experimental", "node"] }
 codec = { workspace = true }
+hex = "0.4"
 
 # ML and async dependencies
 tokio = { version = "1.32", features = ["full"] }

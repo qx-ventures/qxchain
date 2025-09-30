@@ -214,9 +214,6 @@ impl pallet_transaction_payment::Config for Runtime {
 // Implements the types required for the ML Inference pallet.
 impl pallet_ml_inference::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type MinWorkerStake = ConstU64<900>; // 900 units
-	type MinChallengeStake = ConstU64<100>; // 100 units
 	type ChallengePeriod = ConstU32<100>; // 100 blocks
 	type SlashThreshold = ConstU32<51>; // 51% majority
 	type MaxQueueSize = ConstU32<100>; // Maximum 100 requests per worker queue

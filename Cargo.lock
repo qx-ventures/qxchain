@@ -12753,6 +12753,7 @@ dependencies = [
  "docify",
  "futures",
  "futures-timer",
+ "hex",
  "jsonrpsee",
  "log",
  "parity-scale-codec",

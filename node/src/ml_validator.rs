@@ -5,14 +5,15 @@ use polkadot_sdk::sc_client_api::{Backend, BlockBackend};
 use polkadot_sdk::sp_api::ProvideRuntimeApi;
 use polkadot_sdk::sp_blockchain::HeaderBackend;
 use polkadot_sdk::sc_transaction_pool_api::TransactionPool;
-use polkadot_sdk::sp_runtime::traits::IdentifyAccount;
 use polkadot_sdk::sp_core::crypto::Pair;
-use codec::Encode;
 use std::sync::Arc;
 use std::time::Duration;
 use std::collections::HashSet;
 use log::{info, error, warn};
 use crate::ai_client::{AiClient, AiConfig};
+use crate::node_identity::{NodeIdentityRegistry, NodeType, NodeIdentity};
+// Transaction construction will be added later
+// use qxchain_runtime::{UncheckedExtrinsic, RuntimeCall, MlInferenceCall};
 
 /// ML Validator that verifies inference results
 pub struct MlValidator<Block, Client, Backend, Pool> {
@@ -22,6 +23,9 @@ pub struct MlValidator<Block, Client, Backend, Pool> {
     keypair: polkadot_sdk::sp_core::sr25519::Pair,
     transaction_pool: Arc<Pool>,
     processed_inferences: HashSet<u32>,
+    identity_registry: Arc<NodeIdentityRegistry>,
+    peer_id: String,
+    endpoint: String,
     _phantom: std::marker::PhantomData<Block>,
 }
 
@@ -39,8 +43,11 @@ where
         ai_config: AiConfig,
         keypair: polkadot_sdk::sp_core::sr25519::Pair,
         transaction_pool: Arc<Pool>,
+        peer_id: String,
+        endpoint: String,
     ) -> Self {
         let ai_client = AiClient::new(ai_config);
+        let identity_registry = Arc::new(NodeIdentityRegistry::new());
         Self {
             client,
             backend,
@@ -48,6 +55,9 @@ where
             keypair,
             transaction_pool,
             processed_inferences: HashSet::new(),
+            identity_registry,
+            peer_id,
+            endpoint,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -56,10 +66,25 @@ where
     pub async fn start(mut self) {
         info!("🛡️ Starting ML Validator");
 
-        // Auto-register as validator on startup
-        if let Err(e) = self.register_validator().await {
-            error!("Failed to register as validator: {:?}", e);
-            warn!("Validator will continue but won't validate inferences until registered");
+        // Register self in the local identity registry
+        let account_id = self.keypair.public().0.to_vec();
+        if let Err(e) = self.identity_registry.register_self(
+            self.peer_id.clone(),
+            self.endpoint.clone(),
+            NodeType::Validator,
+            account_id.clone(),
+        ) {
+            error!("Failed to register node identity: {:?}", e);
+        }
+
+        // Announce availability as a validator through P2P network
+        // No on-chain registration needed - permissionless network
+        info!("📢 Broadcasting validator availability to network");
+        self.identity_registry.announce_self();
+
+        // Update status to online
+        if let Err(e) = self.identity_registry.update_self_status(&account_id, true) {
+            warn!("Failed to update node status: {:?}", e);
         }
 
         // Main validator loop
@@ -139,33 +164,32 @@ where
     async fn submit_validation(&self, inference_id: u32) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Submitting validation for inference {}", inference_id);
 
-        // This would create and submit a validate_inference extrinsic
-        // Placeholder for now - actual implementation would submit transaction
+        // TODO: Implement proper transaction construction once runtime types are properly configured
 
+        info!("✅ Validation ready for submission (transaction construction pending)");
         Ok(())
     }
 
     /// Submit challenge for incorrect inference
-    async fn submit_challenge(&self, inference_id: u32, _expected_output: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn submit_challenge(&self, inference_id: u32, expected_output: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Submitting challenge for inference {}", inference_id);
+        info!("Expected output: {}...", &expected_output[..expected_output.len().min(100)]);
 
-        // This would create and submit a challenge_inference extrinsic
-        // Placeholder for now - actual implementation would submit transaction
+        // TODO: Implement proper transaction construction once runtime types are properly configured
 
+        info!("✅ Challenge ready for submission (transaction construction pending)");
         Ok(())
     }
 
-    /// Register this node as a validator
-    async fn register_validator(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Registering as ML validator...");
-
-        // TODO: Implement proper on-chain registration
-        // This requires constructing and submitting an extrinsic transaction
-        // For now, simulating registration to allow testing
-
-        info!("✅ Successfully registered as ML validator (simulated)");
-        Ok(())
+    /// Get available validators from P2P network
+    async fn discover_validators(&self) -> Vec<NodeIdentity> {
+        // In a permissionless network, validators are discovered through P2P
+        // No on-chain registration needed
+        self.identity_registry.get_online_validators()
     }
+
+    // Transaction construction will be implemented once runtime types are properly configured
+    // This requires proper SignedExtension trait implementation
 }
 
 #[derive(Debug, Clone)]

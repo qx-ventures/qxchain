@@ -119,7 +119,7 @@ pub fn run() -> sc_cli::Result<()> {
 			let node_role = cli.node_role.clone();
 			let ai_config = crate::ai_client::AiConfig::new(
 				cli.ai_endpoint.clone(),
-				cli.ai_provider.clone(),
+				"ollama".to_string(),  // Default to Ollama for local models
 				cli.ai_api_key.clone(),
 				cli.ai_model.clone(),
 			);

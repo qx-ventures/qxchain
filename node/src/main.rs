@@ -26,6 +26,7 @@ mod service;
 mod ai_client;
 mod ml_worker;
 mod ml_validator;
+mod node_identity;
 
 fn main() -> polkadot_sdk::sc_cli::Result<()> {
 	command::run()
