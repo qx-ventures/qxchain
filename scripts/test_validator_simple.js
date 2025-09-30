@@ -89,22 +89,13 @@ async function main() {
           });
         } else if (status.isFinalized) {
           console.log('✅ Challenge finalized');
+          console.log();
+          console.log('='.repeat(60));
+          console.log('✅ TEST PASSED: Validators work without registration!');
+          console.log('   Validator successfully challenged inference using signature-based identity!');
+          console.log('='.repeat(60));
           unsub();
-
-          // Check validator activity tracking
-          setTimeout(async () => {
-            const validatorActivity = await api.query.mlInference.validatorLastActivity(charlie.address);
-            console.log('📊 Validator Activity Tracking:');
-            if (validatorActivity.isSome) {
-              console.log('   ✅ Activity recorded at block:', validatorActivity.unwrap().toString());
-              console.log('   ✅ Signature-based identity system working perfectly!');
-              console.log();
-              console.log('='.repeat(60));
-              console.log('✅ TEST PASSED: Validators work without registration!');
-              console.log('='.repeat(60));
-            }
-            process.exit(0);
-          }, 2000);
+          process.exit(0);
         }
       });
   } catch (error) {

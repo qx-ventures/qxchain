@@ -11,8 +11,9 @@ async function main() {
   console.log('='.repeat(60));
   console.log();
 
-  // Connect to local node
-  const provider = new WsProvider('ws://localhost:9944');
+  // Connect to node (use environment variable or default)
+  const endpoint = process.env.CHAIN_ENDPOINT || 'ws://localhost:9944';
+  const provider = new WsProvider(endpoint);
   const api = await ApiPromise.create({ provider });
 
   console.log('✅ Connected to chain:', (await api.rpc.system.chain()).toString());

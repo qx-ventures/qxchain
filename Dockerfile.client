@@ -1,26 +1,26 @@
 # QX Chain Client Dockerfile
-# Runs a Python client for interacting with QX Chain workers
+# Runs JavaScript-based client for submitting inference requests to QX Chain
+# Uses signature-based authentication (no registration required)
 
-FROM ubuntu:22.04
+FROM node:20-bullseye-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    python3 \
-    python3-pip \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Create user
 RUN useradd -m -u 1001 -s /bin/bash qxuser
 WORKDIR /home/qxuser
 
-# Install Python dependencies
-COPY scripts/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+# Copy package files and install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install --production
 
 # Copy scripts
 COPY scripts/ /home/qxuser/scripts/
-RUN chown -R qxuser:qxuser /home/qxuser/scripts/
+RUN chown -R qxuser:qxuser /home/qxuser
 
 USER qxuser
 
@@ -38,37 +38,57 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}🚀 Starting QX Chain Client...${NC}"
+echo -e "${BLUE}════════════════════════════════════════════${NC}"
 
 # Configuration with defaults
 CHAIN_ENDPOINT="${CHAIN_ENDPOINT:-ws://host.docker.internal:9944}"
 CUSTOMER_SEED="${CUSTOMER_SEED:-//Alice}"
-INTERACTIVE="${INTERACTIVE:-true}"
+WORKER_SEED="${WORKER_SEED:-//Bob}"
+PROMPT="${PROMPT:-Explain quantum computing in one sentence}"
+MODEL_ID="${MODEL_ID:-1}"
+MODE="${MODE:-interactive}"
 
 echo -e "${BLUE}🔧 Client Configuration:${NC}"
 echo -e "   Chain endpoint: ${CHAIN_ENDPOINT}"
 echo -e "   Customer seed: ${CUSTOMER_SEED}"
-echo -e "   Interactive mode: ${INTERACTIVE}"
+echo -e "   Worker target: ${WORKER_SEED}"
+echo -e "   Prompt: ${PROMPT}"
+echo -e "   Model ID: ${MODEL_ID}"
+echo -e "   Mode: ${MODE}"
+echo -e "${YELLOW}💡 Architecture: Signature-based (no registration required)${NC}"
+echo ""
 
-# Build client command (customer.py is always interactive)
-CLIENT_CMD="python3 /home/qxuser/scripts/customer.py --chain $CHAIN_ENDPOINT --seed $CUSTOMER_SEED"
+if [ "$MODE" = "interactive" ]; then
+    echo -e "${YELLOW}💡 Interactive mode: Dropping to shell for manual testing${NC}"
+    echo -e "${YELLOW}💡 Available scripts:${NC}"
+    echo -e "   • node scripts/submit_inference.js"
+    echo -e "   • node scripts/check_bob_queue.js"
+    echo -e "   • node scripts/test_validator_simple.js"
+    echo -e "   • node scripts/test_validator_challenge.js"
+    echo ""
+    exec /bin/bash
+else
+    echo -e "${BLUE}👤 Submitting inference request...${NC}"
 
-echo -e "${BLUE}👤 Starting customer client...${NC}"
-echo -e "${YELLOW}Command: ${CLIENT_CMD}${NC}"
-
-cd /home/qxuser/scripts
-exec $CLIENT_CMD
+    # Run the submission script
+    cd /home/qxuser
+    exec node scripts/submit_inference.js
+fi
 EOF
 
 RUN chmod +x /home/qxuser/start_client.sh
 
 # Environment variables
-ENV CHAIN_ENDPOINT=ws://host.docker.internal:9933
+ENV CHAIN_ENDPOINT=ws://host.docker.internal:9944
 ENV CUSTOMER_SEED=//Alice
-ENV INTERACTIVE=true
+ENV WORKER_SEED=//Bob
+ENV PROMPT="Explain quantum computing in one sentence"
+ENV MODEL_ID=1
+ENV MODE=interactive
 
 # No exposed ports needed for client
-# Health check based on script availability
+# Health check based on node availability
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python3 /home/qxuser/scripts/customer.py --help > /dev/null || exit 1
+    CMD node --version > /dev/null || exit 1
 
 CMD ["/home/qxuser/start_client.sh"]
