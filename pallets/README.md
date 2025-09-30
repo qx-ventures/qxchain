@@ -2,15 +2,17 @@
 
 This directory contains the custom pallets for the QX Chain, implementing the core logic for decentralized AI inference validation.
 
-## 🎯 QX AI Pallet (`pallet-qx-ai`)
+## 🎯 ML Inference Pallet (`pallet-ml-inference`)
 
-The QX AI pallet implements **Optimistic Machine Learning (opML)** consensus for decentralized AI inference validation. It provides a complete request-based system for AI inference with stake-based security.
+The ML Inference pallet implements **Optimistic Machine Learning (opML)** consensus for decentralized AI inference validation. It provides a **permissionless, signature-based** system where identity is proven cryptographically without pre-registration.
 
 ### 🔑 Key Features
 
-- **Worker Management**: Registration, staking, and status tracking for AI workers
-- **Validator System**: Stake-based validator registration for inference validation
-- **Request Queue System**: Workers maintain bounded queues of inference requests
+- **Signature-Based Identity**: Workers and validators are identified by their transaction signatures - no registration needed!
+- **Permissionless Participation**: Any account can become a worker or validator by simply signing transactions
+- **Automatic Queue Creation**: Worker queues are created automatically when first request is assigned
+- **Activity Tracking**: System tracks worker/validator activity by recording last active block number
+- **Request Queue System**: Workers maintain bounded queues of inference requests (max 100)
 - **Inference Tracking**: Complete lifecycle tracking from request to validation
 - **Optimistic Consensus**: Assume correctness unless challenged by validators
 - **Slashing Mechanism**: Economic penalties for malicious or incorrect behavior
@@ -58,71 +60,74 @@ pub struct InferenceResult<AccountId> {
 
 ### 🎮 Extrinsics (Functions)
 
-#### Worker Functions
-- `register_worker(stake)`: Register as AI worker with stake
-- `update_worker_status(online)`: Update worker availability
-- `submit_inference(request_id, output)`: Submit inference result
+All functions use **signature-based identity** - no pre-registration required!
 
 #### Customer Functions
-- `submit_request(target_worker, prompt, model_id)`: Submit inference request
+- `submit_request(target_worker, prompt, model_id)`: Submit inference request to any worker
+
+#### Worker Functions
+- `submit_inference(request_id, output)`: Submit inference result (identity proven by signature)
 
 #### Validator Functions
-- `register_validator(stake)`: Register as validator with stake
-- `challenge_inference(inference_id)`: Challenge incorrect inference
-- `validate_inference(inference_id)`: Validate correct inference
+- `challenge_inference(inference_id, expected_output)`: Challenge incorrect inference (identity proven by signature)
+- `validate_inference(inference_id)`: Validate correct inference (identity proven by signature)
 
 ### 📡 Events
 
-- `WorkerRegistered`: Worker successfully registered
-- `ValidatorRegistered`: Validator successfully registered
 - `RequestSubmitted`: New inference request created
 - `RequestAssigned`: Request assigned to worker
-- `InferenceSubmitted`: Inference result submitted
+- `InferenceSubmitted`: Inference result submitted by worker
 - `InferenceChallenged`: Inference challenged by validator
 - `InferenceValidated`: Inference validated by consensus
-- `WorkerSlashed`: Worker penalized for malicious behavior
-- `WorkerStatusUpdated`: Worker online/offline status changed
+- `WorkerBanned`: Worker penalized for malicious behavior
+- `ChallengeConsensusReached`: Validator consensus reached on challenge
 - `RequestCompleted`: Request processing completed
 
 ### ⚙️ Configuration
 
 ```rust
-impl pallet_qx_ai::Config for Runtime {
-    type Currency = Balances;
-    type MinWorkerStake = ConstU64<1000>;      // 1,000 tokens minimum
-    type MinValidatorStake = ConstU64<100>;    // 100 tokens minimum
-    type MinChallengeStake = ConstU64<100>;    // 100 tokens to challenge
+impl pallet_ml_inference::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
     type ChallengePeriod = ConstU32<100>;      // 100 blocks challenge window
     type SlashThreshold = ConstU32<51>;        // 51% majority for slashing
     type MaxQueueSize = ConstU32<100>;         // 100 requests per worker max
 }
 ```
 
-### 🎯 Economic Model
+### 🎯 Signature-Based Identity Model
 
-#### Staking Requirements
-- **Workers**: Minimum 1,000 tokens stake
-- **Validators**: Minimum 100 tokens stake
-- **Challenge**: 100 tokens to submit challenge
+#### How It Works
+1. **No Registration**: Workers and validators don't need to call any registration function
+2. **Automatic Recognition**: First transaction from an account creates their identity
+3. **Activity Tracking**: `WorkerLastActivity` and `ValidatorLastActivity` track participation
+4. **Queue Management**: Worker queues created automatically on first request assignment
 
-#### Slashing Conditions
-- Incorrect inference results (validated by 51%+ of validators)
-- Malicious behavior or unavailability
-- Economic incentive for honest participation
+#### Benefits
+- **Lower Barriers**: Anyone can participate immediately with just a keypair
+- **Less Storage**: No redundant registration data stored on-chain
+- **Simplified UX**: Workers/validators just start their nodes and sign transactions
+- **Cryptographic Security**: Identity proven by Ed25519/Sr25519 signatures
 
 ### 🔧 Storage Items
 
-- `Workers`: Map of worker accounts to their stakes
-- `Validators`: Map of validator accounts to their stakes
-- `WorkerQueues`: Worker request queues (bounded to MaxQueueSize)
-- `WorkerStatus`: Worker online/offline status
-- `InferenceRequests`: All submitted requests
-- `InferenceResults`: All inference results
-- `RequestWorkerMap`: Request ID to worker mapping
+- `WorkerLastActivity<T>`: Tracks last block where each worker was active
+- `ValidatorLastActivity<T>`: Tracks last block where each validator was active
+- `WorkerQueues<T>`: Worker request queues (created automatically, bounded to MaxQueueSize)
+- `InferenceRequests<T>`: All submitted requests
+- `InferenceResults<T>`: All inference results
+- `RequestWorkerMap<T>`: Request ID to worker mapping
+- `InferenceChallenges<T>`: Challenges submitted by validators
+- `BannedWorkers<T>`: Workers banned for malicious behavior
 
-## 📚 Template Pallet
+## 🤖 ML Models Pallet (`pallet-ml-models`)
 
-A basic template pallet is also included for reference and development of additional functionality.
+The ML Models pallet provides a registry for AI models available on the network. It allows workers to register which models they support and enables customers to discover workers by model capabilities.
+
+### Key Features
+- **Model Registry**: On-chain registry of available AI models
+- **Worker-Model Mapping**: Track which workers support which models
+- **Model Metadata**: Store model information (name, version, parameters)
+- **Discovery**: Enable customers to find workers by model type
 
 ## 🔗 Framework Information
 

@@ -31,6 +31,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"
 
+# Subxt for proper transaction construction
+subxt = "0.44"
+subxt-signer = { version = "0.44", features = ["sr25519", "subxt"] }
+
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }
 

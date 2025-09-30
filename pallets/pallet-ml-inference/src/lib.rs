@@ -42,14 +42,6 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// Workers registered on the network
-	#[pallet::storage]
-	pub type Workers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
-
-	/// Validators registered on the network
-	#[pallet::storage]
-	pub type Validators<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
-
 	/// Next request ID
 	#[pallet::storage]
 	pub type NextRequestId<T: Config> = StorageValue<_, u32, ValueQuery>;
@@ -90,10 +82,6 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Worker registered
-		WorkerRegistered { who: T::AccountId },
-		/// Validator registered
-		ValidatorRegistered { who: T::AccountId },
 		/// Request submitted to queue
 		RequestSubmitted { request_id: u32, customer: T::AccountId, model_id: u32 },
 		/// Request assigned to worker
@@ -117,10 +105,6 @@ pub mod pallet {
 	/// Errors that can be returned by this pallet
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Worker already registered
-		WorkerAlreadyRegistered,
-		/// Validator already registered
-		ValidatorAlreadyRegistered,
 		/// Worker not found
 		WorkerNotFound,
 		/// Validator not found
@@ -161,43 +145,10 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Register as a worker
-		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn register_worker(
-			origin: OriginFor<T>,
-		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-
-			ensure!(!Workers::<T>::contains_key(&who), Error::<T>::WorkerAlreadyRegistered);
-			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
-
-			Workers::<T>::insert(&who, true);
-			WorkerQueues::<T>::insert(&who, BoundedVec::new());
-			WorkerStatus::<T>::insert(&who, false);
-
-			Self::deposit_event(Event::WorkerRegistered { who });
-			Ok(())
-		}
-
-		/// Register as a validator
-		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn register_validator(
-			origin: OriginFor<T>,
-		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-
-			ensure!(!Validators::<T>::contains_key(&who), Error::<T>::ValidatorAlreadyRegistered);
-
-			Validators::<T>::insert(&who, true);
-
-			Self::deposit_event(Event::ValidatorRegistered { who });
-			Ok(())
-		}
+		// Removed register_worker and register_validator - using signature-based authentication
 
 		/// Submit an inference request to a specific worker
-		#[pallet::call_index(2)]
+		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn submit_request(
 			origin: OriginFor<T>,
@@ -206,8 +157,9 @@ pub mod pallet {
 			model_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&target_worker), Error::<T>::WorkerNotFound);
+
+			// Worker validation through signature-based authentication
+			// No need to check Workers storage - any account can be a worker
 			ensure!(!BannedWorkers::<T>::contains_key(&target_worker), Error::<T>::WorkerBanned);
 			
 			let bounded_prompt = prompt;
@@ -229,10 +181,10 @@ pub mod pallet {
 			
 			InferenceRequests::<T>::insert(&request_id, &request);
 			RequestWorkerMap::<T>::insert(&request_id, &target_worker);
-			
-			// Add to worker's queue
+
+			// Add to worker's queue - create queue if it doesn't exist
 			WorkerQueues::<T>::try_mutate(&target_worker, |queue_opt| {
-				let queue = queue_opt.as_mut().ok_or(Error::<T>::WorkerNotFound)?;
+				let queue = queue_opt.get_or_insert_with(|| BoundedVec::new());
 				queue.try_push(request_id).map_err(|_| Error::<T>::WorkerQueueFull)?;
 				Ok::<(), Error<T>>(())
 			})?;
@@ -251,28 +203,28 @@ pub mod pallet {
 		}
 
 		/// Update worker online status
-		#[pallet::call_index(3)]
+		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn update_worker_status(
 			origin: OriginFor<T>,
 			online: bool,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&who), Error::<T>::WorkerNotFound);
-			
+
+			// Any account can be a worker - signature proves identity
+			// No need to check Workers storage
 			WorkerStatus::<T>::insert(&who, online);
-			
-			Self::deposit_event(Event::WorkerStatusUpdated { 
-				worker: who, 
-				online 
+
+			Self::deposit_event(Event::WorkerStatusUpdated {
+				worker: who,
+				online
 			});
-			
+
 			Ok(())
 		}
 
 		/// Submit inference result for a request
-		#[pallet::call_index(4)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn submit_inference(
 			origin: OriginFor<T>,
@@ -280,8 +232,8 @@ pub mod pallet {
 			output: BoundedVec<u8, ConstU32<4096>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&who), Error::<T>::WorkerNotFound);
+
+			// Signature-based authentication - any account can submit if they have the right request
 			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
 			
 			let request = InferenceRequests::<T>::get(&request_id)
@@ -336,7 +288,7 @@ pub mod pallet {
 		}
 
 		/// Challenge an inference with expected output
-		#[pallet::call_index(5)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn challenge_inference(
 			origin: OriginFor<T>,
@@ -344,8 +296,9 @@ pub mod pallet {
 			expected_output: BoundedVec<u8, ConstU32<4096>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Validators::<T>::contains_key(&who), Error::<T>::ValidatorNotFound);
+
+			// Signature-based authentication - any account can be a validator
+			// Identity proven by signature, no explicit registration needed
 			
 			let inference = InferenceResults::<T>::get(&inference_id)
 				.ok_or(Error::<T>::InferenceNotFound)?;
@@ -389,16 +342,17 @@ pub mod pallet {
 		}
 
 		/// Validate an inference as correct
-		#[pallet::call_index(6)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn validate_inference(
 			origin: OriginFor<T>,
 			inference_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Validators::<T>::contains_key(&who), Error::<T>::ValidatorNotFound);
-			
+
+			// Signature-based authentication - any account can be a validator
+			// Identity proven by signature, no explicit registration needed
+
 			Self::deposit_event(Event::InferenceValidated { inference_id, validator: who });
 			Ok(())
 		}
@@ -412,14 +366,15 @@ pub mod pallet {
 		) -> DispatchResult {
 			let challenges = InferenceChallenges::<T>::get(&inference_id)
 				.unwrap_or_default();
-			
+
 			// Count validators with matching expected output
 			let matching_challenges = challenges.iter()
 				.filter(|c| c.expected_output == expected_output)
 				.count() as u32;
-			
-			// Get total number of registered validators
-			let total_validators = Validators::<T>::iter().count() as u32;
+
+			// In signature-based system, count unique validators who have challenged
+			// Use total unique challengers as basis for consensus calculation
+			let total_validators = challenges.len() as u32;
 			
 			// Check if we have 2/3+ consensus (using ceiling division)
 			let required_consensus = (total_validators * 2 + 2) / 3; // Ceiling of 2/3
@@ -448,8 +403,7 @@ pub mod pallet {
 			// Ban the worker
 			BannedWorkers::<T>::insert(worker, true);
 
-			// Remove worker from active workers
-			Workers::<T>::remove(worker);
+			// Remove worker queues and status (no Workers storage in signature-based system)
 			WorkerQueues::<T>::remove(worker);
 			WorkerStatus::<T>::remove(worker);
 

@@ -1,28 +1,29 @@
 # QX Chain - Decentralized AI Inference Network
 
-QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a trustless environment where customers submit AI inference requests to workers, and validators can challenge incorrect computations through a stake-based consensus mechanism.
+QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a **permissionless, signature-based** system where workers and validators participate without pre-registration.
 
 ## 🔑 Key Features
 
+- **Signature-Based Identity**: Workers and validators identified by transaction signatures - no registration needed!
+- **Permissionless Participation**: Anyone with a keypair can become a worker or validator
 - **Request-Based AI Inference**: Customers submit requests to specific workers who process AI inference
-- **Worker Queue Management**: Workers maintain queues of pending requests with configurable limits
+- **Automatic Queue Creation**: Worker queues created automatically on first request
 - **Optimistic Validation**: Inferences are assumed correct unless challenged by validators
-- **Stake-based Security**: Workers stake 1,000+ tokens, validators stake 100+ tokens, with slashing for malicious behavior
+- **Activity Tracking**: System automatically tracks worker/validator activity by block number
 - **Multiple AI Models**: Support for various AI models through Ollama integration
 - **Real-time Status Tracking**: Monitor worker availability, request status, and inference results
-- **Interactive Customer Interface**: User-friendly interface for browsing workers and submitting requests
-- **Auto-Configuration**: Validators auto-register, nodes auto-connect, no complex setup needed
-- **Interactive Mode**: All nodes run in interactive mode for full control and monitoring
+- **Slashing Mechanism**: Economic penalties for malicious behavior without upfront staking
+- **Zero Setup**: Workers and validators just start their nodes - no registration scripts needed
 
 ## 🏗️ Architecture
 
 The QX Chain consists of several key components:
 
-- **QX Chain Node**: Polkadot SDK-based blockchain node with custom opML pallet
-- **AI Workers**: Python services that process inference requests and submit results to blockchain
-- **Customers**: Users who submit inference requests through interactive interface
-- **Validators**: Network participants who validate inference correctness
-- **opML Pallet**: Custom Substrate pallet implementing optimistic ML consensus with request queuing
+- **QX Chain Node**: Polkadot SDK-based blockchain node with signature-based ML inference pallet
+- **AI Workers**: Rust-native workers that process inference requests and submit results via signed transactions
+- **Customers**: Users who submit inference requests by targeting any worker account
+- **Validators**: Network participants who validate inference correctness using their signatures
+- **ML Inference Pallet**: Custom Substrate pallet implementing permissionless opML consensus
 
 ## 📋 Prerequisites
 
@@ -128,135 +129,155 @@ docker run -it \
 
 ### Option B: Native Setup
 
-**1. Complete Setup (One-time):**
+**1. Build the Chain:**
 ```bash
-cd scripts
-./setup_qx_chain.sh
+cargo build --release
 ```
 
-**2. Start Services (In Separate Terminals):**
-
-**Terminal 1 - Start QX Chain:**
+**2. Setup Ollama (One-time):**
 ```bash
-cd scripts
-./start_chain.sh
+# Install Ollama (if not already installed)
+# macOS/Linux: curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull AI model
+ollama pull gemma3:1b
 ```
 
-**Terminal 2 - Start AI Worker:**
+**3. Start Services (In Separate Terminals):**
+
+**Terminal 1 - Start Worker Node:**
 ```bash
-cd scripts
-./start_worker.sh
+./target/release/qxchain --dev --tmp \
+  --node-role worker \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
 ```
 
-**Terminal 3 - Start Validator:**
+**Terminal 2 - Start Validator Node (optional):**
 ```bash
-cd scripts
-./start_validator.sh
+./target/release/qxchain --dev \
+  --node-role validator \
+  --rpc-port 9945 \
+  --port 30334 \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
 ```
 
-**Terminal 4 - Start Customer Interface:**
+**Terminal 3 - Submit Inference Request:**
 ```bash
-cd scripts
-./start_customer.sh
+# Install dependencies
+npm install @polkadot/api
+
+# Submit inference request
+node scripts/submit_inference.js
 ```
 
 ## 🔧 How to Run
 
-### Running the Main Chain
+### Running Worker Nodes
 
-To start the QX Chain node:
-
-```bash
-# Navigate to scripts directory
-cd scripts
-
-# Start the blockchain node
-./start_chain.sh
-```
-
-This will:
-- Start the QX Chain node on `ws://localhost:9944`
-- Enable instant-seal consensus (blocks created only when transactions occur)
-- Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
-- Show logs in terminal and save to `logs/chain.log`
-
-### Running AI Workers
-
-To start an AI worker that processes inference requests:
+Workers are built into the node binary with signature-based identity:
 
 ```bash
-# In a separate terminal
-cd scripts
+# Build the chain
+cargo build --release
 
-# Start the worker service
-./start_worker.sh
+# Start worker node (no registration needed!)
+./target/release/qxchain --dev --tmp \
+  --node-role worker \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
 ```
 
 The worker will:
+- Start on `ws://localhost:9944`
+- Automatically identify itself via transaction signatures
 - Connect to Ollama for AI model inference
-- Listen for requests on `http://localhost:8000` (or dynamic port)
-- Submit inference results to the QX Chain
-- Log activities to `logs/worker.log`
+- Poll for requests every 5 seconds
+- Submit inference results with cryptographic identity proof
 
-### Running Validators
+### Running Validator Nodes
 
-To start a validator that monitors and validates inferences:
-
-```bash
-# In a separate terminal  
-cd scripts
-
-# Start the validator service
-./start_validator.sh
-```
-
-### Running Customer Interface
-
-To start the interactive customer interface for submitting inference requests:
+Validators are also built into the node binary:
 
 ```bash
-# In a separate terminal
-cd scripts
-
-# Start the customer interface
-./start_customer.sh
+# Start validator node (separate chain for testing)
+./target/release/qxchain --dev \
+  --node-role validator \
+  --rpc-port 9945 \
+  --port 30334 \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
 ```
 
-The customer interface provides:
-- Browse available workers and their status
-- Submit inference requests to specific workers
-- Monitor request status and retrieve results
-- Interactive menu for easy navigation
+The validator will:
+- Monitor pending inferences
+- Challenge incorrect results using signature-based identity
+- No pre-registration required!
+
+### Submitting Inference Requests
+
+Use the JavaScript test scripts:
+
+```bash
+# Install dependencies (one-time)
+npm install @polkadot/api
+
+# Submit inference request to worker
+node scripts/submit_inference.js
+
+# Test validator challenge functionality
+node scripts/test_validator_simple.js
+
+# Check worker queue status
+node scripts/check_bob_queue.js
+```
 
 ## 🧪 How to Test
 
 ### Testing AI Inference Pipeline
 
-**Option 1: Interactive Customer Interface (Recommended)**
+**Step 1: Start a Worker Node**
 
 ```bash
-cd scripts
-./start_customer.sh
+./target/release/qxchain --dev --tmp \
+  --node-role worker \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
 ```
 
-This provides a user-friendly interface to:
-1. Browse available workers
-2. Submit inference requests
-3. Monitor request status
-4. View results
-
-### Manual API Testing
-
-Test the worker API directly:
+**Step 2: Submit Inference Request**
 
 ```bash
-# Test inference endpoint
-curl -X POST http://localhost:8000/inference \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello, how are you?", "model_id": 0}'
+node scripts/submit_inference.js
+```
 
-# Check worker status
-curl http://localhost:8000/status
+This will:
+- Submit a request to Bob's worker account (using Alice as customer)
+- Worker automatically processes with signature-based identity
+- No pre-registration needed!
+
+**Step 3: Check Results**
+
+The script automatically checks for results after 10 seconds. You can also check manually:
+
+```bash
+node scripts/check_bob_queue.js
+```
+
+### Testing Validator Challenges
+
+**Start a validator and test challenging:**
+
+```bash
+# Terminal 1: Worker
+./target/release/qxchain --dev --tmp --node-role worker
+
+# Terminal 2: Submit inference
+node scripts/submit_inference.js
+
+# Terminal 3: Validator challenge (uses signature-based identity)
+node scripts/test_validator_simple.js
 ```
 
 ## 🌐 Service Endpoints
@@ -265,52 +286,72 @@ curl http://localhost:8000/status
 - **Blockchain WebSocket**: `ws://localhost:9933` (shared by all nodes)
 - **Blockchain HTTP**: `http://localhost:9933` (shared by all nodes)
 - **Ollama API**: `http://localhost:11434`
-- **Customer Interface**: Interactive terminal interface via Docker container
 
 ### Native Services
-- **QX Chain RPC**: `ws://localhost:9944`
-- **QX Chain HTTP**: `http://localhost:9944`
+- **Worker Node RPC**: `ws://localhost:9944`
+- **Validator Node RPC**: `ws://localhost:9945` (if running separate validator)
 - **Ollama API**: `http://localhost:11434`
-- **Customer Interface**: Interactive terminal interface via `start_customer.sh`
+
+### Testing Scripts
+- **Submit Inference**: `node scripts/submit_inference.js`
+- **Check Worker Queue**: `node scripts/check_bob_queue.js`
+- **Test Validator**: `node scripts/test_validator_simple.js`
 
 ## 📁 Project Structure
 
 ```
 qxchain/
-├── node/                    # Blockchain node implementation
-├── runtime/                 # Runtime logic and configuration  
-├── pallets/
-│   ├── pallet-qx-ai/       # Custom opML pallet
-│   └── template/           # Template pallet
-├── scripts/                # Setup and service scripts
-│   ├── setup_qx_chain.sh   # Complete setup
-│   ├── start_chain.sh      # Start blockchain
-│   ├── start_worker.sh     # Start AI worker
-│   ├── start_validator.sh  # Start validator
-│   ├── start_customer.sh   # Start customer interface
-│   ├── customer.py         # Customer interface implementation
-│   ├── ollama_worker.py    # Worker implementation
-│   └── validator.py        # Validator implementation
-└── logs/                   # Service logs
+├── node/                           # Blockchain node implementation
+│   ├── src/
+│   │   ├── service.rs             # Node service and consensus
+│   │   ├── chain_spec.rs          # Chain specification
+│   │   ├── ml_worker.rs           # ML Worker with signature-based identity
+│   │   ├── ml_validator.rs        # ML Validator with signature-based identity
+│   │   ├── ai_client.rs           # Ollama AI client integration
+│   │   └── node_identity.rs       # P2P node identity registry
+│   └── Cargo.toml                 # Node dependencies (no Subxt needed!)
+├── runtime/                        # Runtime logic and configuration
+│   ├── src/lib.rs                 # Runtime definition with ML pallets
+│   └── Cargo.toml                 # Runtime dependencies
+├── pallets/                        # Custom FRAME pallets
+│   ├── pallet-ml-inference/       # ML inference with signature-based identity
+│   │   ├── src/lib.rs             # Pallet logic (no registration extrinsics)
+│   │   └── src/types.rs           # Data structures
+│   └── pallet-ml-models/          # Model registry and capabilities
+├── scripts/                        # Testing and demo scripts
+│   ├── submit_inference.js        # Submit inference request
+│   ├── test_validator_simple.js   # Test validator challenge
+│   └── test_validator_challenge.js # Test validator workflow
+└── logs/                          # Service logs (development)
 ```
 
-## 🎯 opML Workflow
+### 🔑 Key Architecture Points
 
-1. **Worker Registration**: AI workers stake tokens and register on-chain with status tracking
-2. **Request Submission**: Customers submit inference requests to specific workers
-3. **Queue Management**: Workers maintain queues of pending requests (max 100 per worker)
-4. **Inference Processing**: Workers process requests and submit results to blockchain
-5. **Challenge Period**: Validators can challenge incorrect inferences
-6. **Validation**: Consensus determines if inference is correct
-7. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
+- **No Registration Scripts**: Workers/validators don't need `register_worker.js` or similar
+- **Rust-Native Workers**: ML worker logic integrated directly into node binary
+- **Signature-Based**: Identity proven by Ed25519/Sr25519 signatures on transactions
+- **Activity Tracking**: `WorkerLastActivity` and `ValidatorLastActivity` storage in pallet
+- **Automatic Queues**: Worker queues created on-demand when first request assigned
+
+## 🎯 opML Workflow (Signature-Based)
+
+1. **Zero Setup**: Workers and validators start nodes - no registration required!
+2. **Request Submission**: Customers submit inference requests to any worker account
+3. **Automatic Queue**: Worker queue created automatically on first request
+4. **Inference Processing**: Workers process requests and submit results via signed transactions
+5. **Identity Proven**: Worker identity automatically verified by transaction signature
+6. **Challenge Period**: Validators can challenge incorrect inferences using their signatures
+7. **Activity Tracking**: System records last active block for workers and validators
+8. **Consensus & Slashing**: If 51%+ validators agree on challenge, worker is banned
 
 ## 🔄 Request Lifecycle
 
-1. **Queued**: Request submitted to worker's queue
-2. **Assigned**: Request assigned to worker for processing
-3. **Processing**: Worker executing AI inference
-4. **Completed**: Result submitted to blockchain
-5. **Validated**: Result validated by network consensus
+1. **Queued**: Request submitted to worker's queue (queue created if first request)
+2. **Processing**: Worker executing AI inference
+3. **Completed**: Result submitted via signed transaction (worker identity proven automatically)
+4. **Pending Validation**: Challenge period begins
+5. **Validated/Challenged**: Validators review and either accept or challenge
+6. **Finalized**: Request marked complete or worker slashed if challenged successfully
 
 ## 🛠️ Development
 
@@ -332,27 +373,41 @@ cd pallets/pallet-qx-ai && cargo build --release
 # Run Rust tests
 cargo test
 
-# Run Python tests
-cd scripts
-python -m pytest test_*.py
+# Test pallets specifically
+cargo test -p pallet-ml-inference
+cargo test -p pallet-ml-models
 ```
 
 ## 🔍 Monitoring
 
-### Logs
+### Node Logs
 
-All services save logs to the `logs/` directory:
-- `chain.log` - Blockchain node logs
-- `worker.log` - AI worker logs  
-- `validator_*.log` - Validator logs
+Monitor node output in the terminal where you started it, or check logs:
+
+```bash
+# Worker node shows inference processing
+# Look for: "📋 Found X request(s) in queue"
+# Look for: "Processing inference request: X"
+# Look for: "Submitting inference result for request X"
+
+# Validator node shows challenge activity
+# Look for: "🛡️ Starting ML Validator"
+# Look for: "Challenge submitted"
+```
 
 ### Chain Status
 
 Check chain status via RPC:
 ```bash
+# Check chain health
 curl -X POST http://localhost:9944 \
   -H "Content-Type: application/json" \
   -d '{"id":1,"jsonrpc":"2.0","method":"system_health","params":[]}'
+
+# Check current block number
+curl -X POST http://localhost:9944 \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"jsonrpc":"2.0","method":"chain_getHeader","params":[]}'
 ```
 
 ## 🛑 Stopping Services
@@ -371,37 +426,60 @@ docker volume rm ollama
 ```
 
 ### Native Services
-To stop all native services:
-- Press `Ctrl+C` in each terminal running the services
-- Or use the cleanup script: `./scripts/cleanup.sh` (if available)
+To stop native nodes:
+- Press `Ctrl+C` in each terminal running the node
+- Or kill processes: `pkill -f qxchain`
 
 ## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **Build Issues**: Run `./scripts/check_dependencies.sh`
-2. **Ollama Issues**: Re-run `./scripts/setup_ollama.sh`
-3. **Port Conflicts**: Stop services with `Ctrl+C` and restart
-4. **Missing Dependencies**: Ensure Rust, Python, and Ollama are properly installed
+1. **Build Issues**: Run `cargo build --release` and check for compilation errors
+2. **Ollama Issues**: Ensure Ollama is running: `ollama serve` or check Docker container
+3. **Port Conflicts**: Stop nodes with `Ctrl+C` or `pkill -f qxchain` and restart
+4. **Missing Dependencies**: Ensure Rust toolchain and Ollama are properly installed
 
-### Worker Registration Fails with "InsufficientBalance"
+### Workers Not Processing Requests
 
-**Problem**: Worker fails to register with error `InsufficientBalance`
+**Problem**: Worker receives requests but doesn't process them
 
-**Root Cause**: The worker account doesn't have enough tokens for staking
+**Root Cause**:
+- Ollama not running or model not pulled
+- Worker node not started with correct flags
 
-**Solution**: Each test account has exactly 1,000 tokens, which is the minimum required:
-- Workers need minimum 1,000 tokens to stake
-- Validators need minimum 100 tokens to stake  
-- Transaction fees are minimal (1 token per transaction)
+**Solution**:
+```bash
+# Ensure Ollama is running
+ollama serve
 
-**Pre-funded Test Accounts** (all have 1,000 tokens):
+# Pull AI model
+ollama pull gemma3:1b
+
+# Start worker with all required flags
+./target/release/qxchain --dev --tmp \
+  --node-role worker \
+  --ai-endpoint http://localhost:11434 \
+  --ai-model gemma3:1b
+```
+
+### Validators Not Challenging
+
+**Problem**: Validators don't challenge inferences
+
+**Root Cause**: Validator node not monitoring pending inferences
+
+**Solution**:
+- Ensure validator started with `--node-role validator`
+- Check validator logs for "Starting ML Validator" message
+- Validators don't need registration - identity proven by signature
+
+**Pre-funded Test Accounts** (for testing):
 - `//Alice` - Root/Sudo account
-- `//Bob` - Default worker account  
+- `//Bob` - Default worker account
 - `//Charlie` - Default validator account
 - `//Dave`, `//Eve`, `//Ferdie` - Additional test accounts
 
-**Quick Fix**: The scripts now use the correct minimum stake amounts (1,000 for workers, 100 for validators)
+**Note**: With signature-based identity, there's no "registration failed" error - accounts just sign transactions!
 
 ## 🎉 Quick Summary
 
@@ -422,11 +500,12 @@ docker run -it --rm --name client qxchain-client
 ```
 
 **✨ What You Get:**
-- **Auto-Configuration**: Validators register automatically, nodes connect automatically
-- **Auto-Mode**: Both workers and validators run continuously in auto-mode
+- **Signature-Based Identity**: No registration needed - just start nodes with keypairs!
+- **Permissionless**: Workers and validators participate by signing transactions
+- **Auto-Mode**: Both workers and validators run continuously monitoring the chain
 - **Single Port**: Everything uses `ws://localhost:9933`
-- **Status Updates**: Periodic status reports every 30 seconds
-- **Zero Setup**: No complex configuration needed
+- **Activity Tracking**: System automatically tracks participation by block number
+- **Zero Setup**: No registration scripts, no complex configuration
 
 ## 📝 License
 

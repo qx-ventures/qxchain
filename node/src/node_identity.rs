@@ -33,12 +33,10 @@ pub struct NodeIdentity {
 }
 
 /// Node identity registry - decentralized registry for node discovery
-/// This is a local cache that syncs with on-chain state
+/// This is a local cache for P2P node discovery
 pub struct NodeIdentityRegistry {
     identities: Arc<RwLock<HashMap<String, NodeIdentity>>>,
     account_to_peer: Arc<RwLock<HashMap<Vec<u8>, String>>>,
-    // Slashed nodes are tracked on-chain, this is just a local cache
-    slashed_accounts_cache: Arc<RwLock<HashMap<Vec<u8>, bool>>>,
 }
 
 impl NodeIdentityRegistry {
@@ -46,7 +44,6 @@ impl NodeIdentityRegistry {
         Self {
             identities: Arc::new(RwLock::new(HashMap::new())),
             account_to_peer: Arc::new(RwLock::new(HashMap::new())),
-            slashed_accounts_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -59,11 +56,6 @@ impl NodeIdentityRegistry {
         node_type: NodeType,
         account_id: Vec<u8>,
     ) -> Result<(), String> {
-        // Check if account is slashed (from on-chain state cache)
-        if self.is_account_slashed(&account_id) {
-            return Err("Account is slashed on-chain and cannot register".to_string());
-        }
-
         let mut identities = self.identities.write()
             .map_err(|_| "Failed to acquire write lock")?;
         let mut account_map = self.account_to_peer.write()
@@ -146,11 +138,6 @@ impl NodeIdentityRegistry {
     /// Broadcast node identity to peers
     /// Nodes share their identity with others for P2P discovery
     pub fn broadcast_identity(&self, identity: NodeIdentity) -> Result<(), String> {
-        // Don't allow broadcasting if account is slashed
-        if self.is_account_slashed(&identity.account_id) {
-            return Err("Cannot broadcast slashed account".to_string());
-        }
-
         let mut identities = self.identities.write()
             .map_err(|_| "Failed to acquire write lock")?;
         let mut account_map = self.account_to_peer.write()
@@ -184,7 +171,6 @@ impl NodeIdentityRegistry {
                 identities.values()
                     .filter(|n| {
                         n.is_online &&
-                        !self.is_account_slashed(&n.account_id) &&
                         matches!(n.node_type, NodeType::Worker | NodeType::WorkerValidator)
                     })
                     .cloned()
@@ -201,33 +187,12 @@ impl NodeIdentityRegistry {
                 identities.values()
                     .filter(|n| {
                         n.is_online &&
-                        !self.is_account_slashed(&n.account_id) &&
                         matches!(n.node_type, NodeType::Validator | NodeType::WorkerValidator)
                     })
                     .cloned()
                     .collect()
             })
             .unwrap_or_default()
-    }
-
-    /// Update slashed accounts cache from on-chain state
-    /// This is called periodically to sync with chain consensus
-    pub fn update_slashed_cache(&self, slashed_accounts: Vec<Vec<u8>>) {
-        if let Ok(mut cache) = self.slashed_accounts_cache.write() {
-            cache.clear();
-            for account in slashed_accounts {
-                cache.insert(account, true);
-            }
-            info!("Updated slashed accounts cache");
-        }
-    }
-
-    /// Check if an account is slashed (from cache)
-    pub fn is_account_slashed(&self, account_id: &[u8]) -> bool {
-        self.slashed_accounts_cache.read()
-            .ok()
-            .and_then(|cache| cache.get(account_id).copied())
-            .unwrap_or(false)
     }
 
     /// Announce self to P2P network

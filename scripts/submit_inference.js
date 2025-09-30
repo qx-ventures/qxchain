@@ -24,23 +24,15 @@ async function main() {
 
   // Alice is the customer
   const alice = keyring.addFromUri('//Alice');
-  // Bob is the worker
+  // Worker node is running with Bob's keypair
   const bob = keyring.addFromUri('//Bob');
 
   console.log('Customer (Alice):', alice.address);
   console.log('Worker (Bob):', bob.address);
+  console.log('💡 Note: Workers use signature-based identity');
   console.log();
 
-  // Check if worker is registered
-  const workerRegistered = await api.query.mlInference.workers(bob.address);
-  if (!workerRegistered.toJSON()) {
-    console.log('❌ Worker is not registered!');
-    process.exit(1);
-  }
-  console.log('✅ Worker is registered');
-  console.log();
-
-  // Prepare inference request
+  // Prepare inference request - target Bob since that's the worker
   const prompt = "Explain quantum computing in one sentence";
   const modelId = 1;
 
