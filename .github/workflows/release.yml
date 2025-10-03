@@ -61,5 +61,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/release/minimal-template-node
-            target/release/wbuild/minimal-template-runtime/minimal_template_runtime.compact.compressed.wasm
+            target/release/qxchain
+            target/release/wbuild/qxchain-runtime/qxchain_runtime.compact.compressed.wasm

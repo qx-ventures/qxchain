@@ -17,7 +17,7 @@
 
 use crate::cli::Consensus;
 use futures::FutureExt;
-use minimal_template_runtime::{interface::OpaqueBlock as Block, RuntimeApi};
+use qxchain_runtime::{interface::OpaqueBlock as Block, RuntimeApi};
 use polkadot_sdk::{
 	sc_client_api::backend::Backend,
 	sc_executor::WasmExecutor,

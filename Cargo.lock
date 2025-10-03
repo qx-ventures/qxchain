@@ -7310,18 +7310,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
-name = "minimal-template-runtime"
-version = "0.1.0"
-dependencies = [
- "pallet-minimal-template",
- "pallet-qx-ai",
- "parity-scale-codec",
- "polkadot-sdk 2503.0.1",
- "scale-info",
- "serde_json",
-]
-
-[[package]]
 name = "miniz_oxide"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8934,15 +8922,6 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
-]
-
-[[package]]
-name = "pallet-minimal-template"
-version = "0.1.0"
-dependencies = [
- "parity-scale-codec",
- "polkadot-sdk 2503.0.1",
- "scale-info",
 ]
 
 [[package]]
@@ -12668,8 +12647,19 @@ dependencies = [
  "futures",
  "futures-timer",
  "jsonrpsee",
- "minimal-template-runtime",
  "polkadot-sdk 2503.0.1",
+ "qxchain-runtime",
+]
+
+[[package]]
+name = "qxchain-runtime"
+version = "0.1.0"
+dependencies = [
+ "pallet-qx-ai",
+ "parity-scale-codec",
+ "polkadot-sdk 2503.0.1",
+ "scale-info",
+ "serde_json",
 ]
 
 [[package]]

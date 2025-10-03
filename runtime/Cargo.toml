@@ -1,5 +1,5 @@
 [package]
-name = "minimal-template-runtime"
+name = "qxchain-runtime"
 description = "A solochain runtime template built with Substrate, part of Polkadot Sdk."
 version = "0.1.0"
 license = "Unlicense"
@@ -11,7 +11,6 @@ publish = false
 
 [dependencies]
 codec = { workspace = true }
-pallet-minimal-template.workspace = true
 pallet-qx-ai = { path = "../pallets/pallet-qx-ai", default-features = false }
 polkadot-sdk = { workspace = true, features = ["pallet-balances", "pallet-sudo", "pallet-timestamp", "pallet-transaction-payment", "pallet-transaction-payment-rpc-runtime-api", "runtime"] }
 scale-info = { workspace = true }
@@ -25,7 +24,6 @@ default = ["std"]
 std = [
 	"codec/std",
 	"pallet-qx-ai/std",
-	"pallet-minimal-template/std",
 	"polkadot-sdk/std",
 	"scale-info/std",
 	"serde_json/std",

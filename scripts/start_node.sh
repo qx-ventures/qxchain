@@ -128,7 +128,7 @@ show_usage() {
     echo "Examples:"
     echo "  $0 worker                                    # Basic worker with //Bob"
     echo "  $0 worker --seed //Dave                      # Worker with Dave account"
-    echo "  $0 validator --seed //Alice      # Validator with Alice account
+    echo "  $0 validator --seed //Alice      # Validator with Alice account"
     echo ""
     echo "Network Building:"
     echo "  Terminal 1: $0 worker --seed //Bob"

@@ -165,12 +165,8 @@ mod runtime {
 	#[runtime::pallet_index(4)]
 	pub type TransactionPayment = pallet_transaction_payment::Pallet<Runtime>;
 
-	/// A minimal pallet template.
-	#[runtime::pallet_index(5)]
-	pub type Template = pallet_minimal_template::Pallet<Runtime>;
-
 	/// QX opML pallet for machine learning operations
-	#[runtime::pallet_index(6)]
+	#[runtime::pallet_index(5)]
 	pub type QxAi = pallet_qx_ai::Pallet<Runtime>;
 }
 
@@ -210,9 +206,6 @@ impl pallet_transaction_payment::Config for Runtime {
 	// Setting fee as fixed for any length of the call data for demo purposes
 	type LengthToFee = FixedFee<1, <Self as pallet_balances::Config>::Balance>;
 }
-
-// Implements the types required for the template pallet.
-impl pallet_minimal_template::Config for Runtime {}
 
 // Implements the types required for the custom opML pallet.
 impl pallet_qx_ai::Config for Runtime {
