@@ -1,5 +1,5 @@
 name: Install macOS dependencies
-description: Installs dependencies required to compile the template on macOS
+description: Installs dependencies required to compile QX Chain on macOS
 
 runs:
   using: "composite"

@@ -53,7 +53,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
           rustup component add rust-src
 
-      - name: Build the template
+      - name: Build QX Chain
         run: cargo build --locked --release --all-features --all-targets
         timeout-minutes: 90
 

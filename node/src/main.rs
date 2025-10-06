@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Substrate Node Template CLI library.
+//! QX Chain Node CLI library.
 #![warn(missing_docs)]
 
 mod chain_spec;

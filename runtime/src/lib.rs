@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A minimal runtime that includes the template [`pallet`](`pallet_minimal_template`).
+//! A minimal runtime that includes the QX AI pallet for decentralized AI inference validation.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

@@ -28,4 +28,4 @@ if [ $? -ne 0 ]; then
 fi
 
 echo -e "${GREEN}✅ QX Chain built successfully${NC}"
-echo -e "${BLUE}📊 Binary location: ${GREEN}./target/release/parachain-template-node${NC}"
+echo -e "${BLUE}📊 Binary location: ${GREEN}./target/release/qxchain${NC}"

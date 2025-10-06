@@ -1,8 +1,8 @@
 [workspace.package]
 license = "MIT-0"
-authors = ["Parity Technologies <admin@parity.io>"]
-homepage = "https://paritytech.github.io/polkadot-sdk/"
-repository = "https://github.com/paritytech/polkadot-sdk-minimal-template.git"
+authors = ["QX Ventures <info@qx.ventures>"]
+homepage = "https://qx.ventures/"
+repository = "https://github.com/qx-ventures/qxchain.git"
 edition = "2021"
 
 [workspace]

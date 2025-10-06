@@ -1,5 +1,5 @@
 name: Install Ubuntu dependencies
-description: Installs dependencies required to compile the template in Ubuntu
+description: Installs dependencies required to compile QX Chain in Ubuntu
 
 runs:
   using: "composite"

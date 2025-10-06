@@ -280,8 +280,7 @@ qxchain/
 ├── node/                    # Blockchain node implementation
 ├── runtime/                 # Runtime logic and configuration  
 ├── pallets/
-│   ├── pallet-qx-ai/       # Custom opML pallet
-│   └── template/           # Template pallet
+│   └── pallet-qx-ai/       # Custom opML pallet
 ├── scripts/                # Setup and service scripts
 │   ├── setup_qx_chain.sh   # Complete setup
 │   ├── start_chain.sh      # Start blockchain

@@ -1,6 +1,6 @@
 [package]
 name = "qxchain-runtime"
-description = "A solochain runtime template built with Substrate, part of Polkadot Sdk."
+description = "QX Chain runtime for decentralized AI inference validation with opML consensus."
 version = "0.1.0"
 license = "Unlicense"
 authors.workspace = true

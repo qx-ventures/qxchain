@@ -120,10 +120,6 @@ impl pallet_qx_ai::Config for Runtime {
 - `InferenceResults`: All inference results
 - `RequestWorkerMap`: Request ID to worker mapping
 
-## 📚 Template Pallet
-
-A basic template pallet is also included for reference and development of additional functionality.
-
 ## 🔗 Framework Information
 
 💁 Pallets are units of encapsulated logic with clearly defined responsibilities, analogous to modules in the runtime.
