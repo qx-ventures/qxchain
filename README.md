@@ -42,9 +42,27 @@ QX Chain has a three-layer architecture that separates blockchain consensus from
 
 ## 🔧 How to Run
 
-### Running the Main Chain
+### Option 1: Docker (Recommended)
 
-To start the QX Chain node:
+Quick start with Docker:
+
+```bash
+# Build the image
+docker compose build
+
+# Start the node
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop the node
+docker compose down
+```
+
+### Option 2: Native Build
+
+To start the QX Chain node natively:
 
 ```bash
 # Navigate to qxchain scripts directory
@@ -57,7 +75,7 @@ cd qxchain/scripts
 ./start_node.sh
 ```
 
-This will:
+Both methods will:
 - Start the QX Chain node on `ws://localhost:9944`
 - Enable instant-seal consensus (blocks created only when transactions occur)
 - Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
@@ -127,6 +145,75 @@ cd pallets/pallet-qx-ai && cargo build --release
 ```bash
 # Run Rust tests
 cargo test
+```
+
+## 🐳 Docker Deployment
+
+### Quick Start with Docker
+
+```bash
+# Start with Docker Compose (recommended)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the node
+docker-compose down
+```
+
+### Building Multi-Architecture Images
+
+Build for different platforms using Docker Compose:
+
+```bash
+# Build for AMD64 (Intel/AMD processors)
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build
+
+# Build for ARM64 (Apple Silicon, Raspberry Pi)
+DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose build
+
+# Or set the platform in .env file
+cp .env.example .env
+# Edit .env to set DOCKER_DEFAULT_PLATFORM
+docker compose build
+
+# Run with specific platform
+DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose up
+
+# The default platform is linux/amd64 if not specified
+docker compose build  # builds for linux/amd64
+```
+
+### Docker Configuration
+
+The Docker setup includes:
+
+- **Multi-stage builds** for optimized image size
+- **Multi-architecture support** (AMD64, ARM64)
+- **BuildKit optimizations** for faster builds
+- **Security-hardened** distroless runtime
+- **Health checks** and monitoring
+- **Volume persistence** for chain data
+
+
+### Production Deployment
+
+For production, customize the Docker Compose configuration:
+
+```yaml
+services:
+  qxchain:
+    image: qxchain/node:latest
+    command: >
+      --chain=mainnet
+      --validator
+      --rpc-external=false
+      --rpc-cors=none
+    resources:
+      limits:
+        memory: 8G
+        cpus: '4'
 ```
 
 ## 🔍 Monitoring

@@ -1,0 +1,40 @@
+services:
+  qxchain:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Platform can be overridden with DOCKER_DEFAULT_PLATFORM env var or --platform flag
+      # Examples:
+      # - DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build
+      # - DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose build
+      # - docker compose build --build-arg TARGETPLATFORM=linux/amd64
+      platforms:
+        - ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    ports:
+      - "9944:9944"
+      - "30333:30333"
+    volumes:
+      - qxchain_data:/home/qxchain/.local/share/qxchain
+    environment:
+      - RUST_LOG=info
+    command: >
+      --chain=dev
+      --rpc-port=9944
+      --port=30333
+      --rpc-cors=all
+      --rpc-methods=unsafe
+      --rpc-external
+      --consensus=instant-seal
+      --alice
+      --dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/qxchain", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  qxchain_data:
+    driver: local
