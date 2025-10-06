@@ -1,4 +1,11 @@
-//! QX opML pallet - Decentralized AI inference validation with staking and slashing
+//! QX AI pallet - Optimistic AI inference verification with challenge-based validation
+//!
+//! This pallet implements the application layer for QX Chain's civic AI infrastructure.
+//! AIWorkers and AIValidators are NOT blockchain consensus nodes - they are application-layer
+//! entities that interact with the chain to provide and verify AI services.
+//!
+//! AIWorkers: Civic entities that run off-chain AI inference and submit cryptographic commitments
+//! AIValidators: Independent auditors that challenge incorrect submissions during dispute windows
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -14,44 +21,10 @@ pub use pallet::*;
 /// Inference status tracking
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum InferenceStatus {
-	Queued,
-	Processing,
-	Pending,
-	Challenged,
-	Validated,
-	Slashed,
-}
-
-/// Node identity information for linking workers/validators to blockchain nodes
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct NodeIdentity {
-	pub peer_id: BoundedVec<u8, ConstU32<64>>,
-	pub endpoint: BoundedVec<u8, ConstU32<256>>,
-	pub node_type: NodeType,
-}
-
-/// Node type classification
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub enum NodeType {
-	Worker,
-	Validator,
-	WorkerValidator, // Node that can be both
-}
-
-/// Reason for node slashing
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub enum SlashReason {
-	WorkerSlashed,
-	ValidatorMisbehavior,
-	NodeOffline,
-}
-
-/// Challenge data for tracking validator challenges
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct Challenge<AccountId> {
-	pub validator: AccountId,
-	pub expected_output: BoundedVec<u8, ConstU32<4096>>,
-	pub submitted_at: u32,
+	Pending,      // Submitted, awaiting challenge period
+	Challenged,   // Under dispute by validators
+	Finalized,    // Challenge period passed, result valid
+	Slashed,      // Challenge succeeded, worker slashed
 }
 
 /// Request status for tracking
@@ -61,6 +34,15 @@ pub enum RequestStatus {
 	Assigned,
 	Completed,
 	Failed,
+}
+
+/// Challenge data for tracking validator challenges
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct Challenge<AccountId, Balance> {
+	pub validator: AccountId,
+	pub expected_output: BoundedVec<u8, ConstU32<4096>>,
+	pub submitted_at: u32,
+	pub stake: Balance, // Validator stake weight for consensus calculation
 }
 
 /// Inference request data
@@ -74,14 +56,16 @@ pub struct InferenceRequest<AccountId> {
 	pub created_at: u32,
 }
 
-/// Inference result data
+/// Inference result data with cryptographic commitment
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct InferenceResult<AccountId> {
 	pub request_id: u32,
 	pub worker: AccountId,
 	pub output: BoundedVec<u8, ConstU32<4096>>,
+	pub model_hash: BoundedVec<u8, ConstU32<64>>, // Cryptographic hash of model used
 	pub status: InferenceStatus,
 	pub submitted_at: u32,
+	pub challenge_deadline: u32, // Block number when challenge period ends
 }
 
 #[frame::pallet]
@@ -91,27 +75,27 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: polkadot_sdk::frame_system::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as polkadot_sdk::frame_system::Config>::RuntimeEvent>;
-		
+
 		/// The currency trait for handling token operations
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
-		
-		/// Minimum stake required for workers
+
+		/// Minimum stake required for AIWorkers
 		#[pallet::constant]
-		type MinWorkerStake: Get<<Self::Currency as Currency<Self::AccountId>>::Balance>;
-		
-		/// Minimum stake required for validators to challenge
+		type MinAIWorkerStake: Get<<Self::Currency as Currency<Self::AccountId>>::Balance>;
+
+		/// Minimum stake required for AIValidators to challenge
 		#[pallet::constant]
 		type MinChallengeStake: Get<<Self::Currency as Currency<Self::AccountId>>::Balance>;
-		
-		/// Challenge period in blocks
+
+		/// Challenge period in blocks (7 days in specification)
 		#[pallet::constant]
 		type ChallengePeriod: Get<BlockNumberFor<Self>>;
-		
-		/// Percentage of validators needed to slash (e.g., 51 = 51%)
+
+		/// Percentage of staked validator weight needed to slash (51% = 51)
 		#[pallet::constant]
 		type SlashThreshold: Get<u32>;
-		
-		/// Maximum requests in queue per worker
+
+		/// Maximum requests in queue per AIWorker
 		#[pallet::constant]
 		type MaxQueueSize: Get<u32>;
 	}
@@ -119,13 +103,13 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// Workers registered on the network
+	/// AIWorkers registered on the network (application layer entities, NOT consensus nodes)
 	#[pallet::storage]
-	pub type Workers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, <T::Currency as Currency<T::AccountId>>::Balance>;
+	pub type AIWorkers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, <T::Currency as Currency<T::AccountId>>::Balance>;
 
-	/// Validators registered on the network
+	/// AIValidators registered on the network (application layer entities, NOT consensus nodes)
 	#[pallet::storage]
-	pub type Validators<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, <T::Currency as Currency<T::AccountId>>::Balance>;
+	pub type AIValidators<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, <T::Currency as Currency<T::AccountId>>::Balance>;
 
 	/// Next request ID
 	#[pallet::storage]
@@ -139,87 +123,71 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type InferenceRequests<T: Config> = StorageMap<_, Blake2_128Concat, u32, InferenceRequest<T::AccountId>>;
 
-	/// Inference results
+	/// Inference results with commitments
 	#[pallet::storage]
 	pub type InferenceResults<T: Config> = StorageMap<_, Blake2_128Concat, u32, InferenceResult<T::AccountId>>;
 
-	/// Worker queues - maps worker to list of request IDs
+	/// AIWorker queues - maps AIWorker to list of request IDs
 	#[pallet::storage]
-	pub type WorkerQueues<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, BoundedVec<u32, T::MaxQueueSize>>;
+	pub type AIWorkerQueues<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, BoundedVec<u32, T::MaxQueueSize>>;
 
-	/// Request to worker mapping
+	/// Request to AIWorker mapping
 	#[pallet::storage]
 	pub type RequestWorkerMap<T: Config> = StorageMap<_, Blake2_128Concat, u32, T::AccountId>;
 
-	/// Worker status - true if online/available
+	/// AIWorker status - true if online/available
 	#[pallet::storage]
-	pub type WorkerStatus<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
+	pub type AIWorkerStatus<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
 
 	/// Challenges for each inference - maps inference_id to list of challenges
 	#[pallet::storage]
-	pub type InferenceChallenges<T: Config> = StorageMap<_, Blake2_128Concat, u32, BoundedVec<Challenge<T::AccountId>, ConstU32<100>>>;
+	pub type InferenceChallenges<T: Config> = StorageMap<_, Blake2_128Concat, u32, BoundedVec<Challenge<T::AccountId, <T::Currency as Currency<T::AccountId>>::Balance>, ConstU32<100>>>;
 
-	/// Banned workers - workers that have been slashed and removed from network
+	/// Banned AIWorkers - workers that have been slashed and removed from network
 	#[pallet::storage]
-	pub type BannedWorkers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
-
-	/// Node identities - maps account to node identity information
-	#[pallet::storage]
-	pub type NodeIdentities<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, NodeIdentity>;
-
-	/// Node to account mapping - maps peer_id to account
-	#[pallet::storage]
-	pub type NodeToAccount<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, T::AccountId>;
-
-	/// Slashed nodes - nodes that have been slashed and should be disconnected
-	#[pallet::storage]
-	pub type SlashedNodes<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, bool>;
+	pub type BannedAIWorkers<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, bool>;
 
 	/// Events emitted by the pallet
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Worker registered
-		WorkerRegistered { who: T::AccountId, stake: <T::Currency as Currency<T::AccountId>>::Balance },
-		/// Validator registered
-		ValidatorRegistered { who: T::AccountId, stake: <T::Currency as Currency<T::AccountId>>::Balance },
+		/// AIWorker registered (application layer entity, not a consensus node)
+		AIWorkerRegistered { who: T::AccountId, stake: <T::Currency as Currency<T::AccountId>>::Balance },
+		/// AIValidator registered (application layer entity, not a consensus node)
+		AIValidatorRegistered { who: T::AccountId, stake: <T::Currency as Currency<T::AccountId>>::Balance },
 		/// Request submitted to queue
 		RequestSubmitted { request_id: u32, customer: T::AccountId, model_id: u32 },
-		/// Request assigned to worker
+		/// Request assigned to AIWorker
 		RequestAssigned { request_id: u32, worker: T::AccountId },
-		/// Inference submitted
-		InferenceSubmitted { inference_id: u32, request_id: u32, worker: T::AccountId },
-		/// Inference challenged
+		/// Inference submitted with cryptographic commitment
+		InferenceSubmitted { inference_id: u32, request_id: u32, worker: T::AccountId, challenge_deadline: u32 },
+		/// Inference challenged by AIValidator
 		InferenceChallenged { inference_id: u32, validator: T::AccountId },
-		/// Inference validated
-		InferenceValidated { inference_id: u32, validator: T::AccountId },
-		/// Worker slashed
-		WorkerSlashed { worker: T::AccountId, inference_id: u32, amount: <T::Currency as Currency<T::AccountId>>::Balance },
-		/// Worker banned from network
-		WorkerBanned { worker: T::AccountId, inference_id: u32 },
-		/// Challenge consensus reached
-		ChallengeConsensusReached { inference_id: u32, challenge_count: u32, total_validators: u32 },
-		/// Worker status updated
-		WorkerStatusUpdated { worker: T::AccountId, online: bool },
+		/// Inference automatically finalized after challenge period
+		InferenceFinalized { inference_id: u32, worker: T::AccountId },
+		/// AIWorker slashed after successful challenge
+		AIWorkerSlashed { worker: T::AccountId, inference_id: u32, amount: <T::Currency as Currency<T::AccountId>>::Balance },
+		/// AIWorker banned from network
+		AIWorkerBanned { worker: T::AccountId, inference_id: u32 },
+		/// Challenge consensus reached (51%+ validators agree)
+		ChallengeConsensusReached { inference_id: u32, challenge_stake_weight: u128, total_validator_stake: u128 },
+		/// AIWorker status updated
+		AIWorkerStatusUpdated { worker: T::AccountId, online: bool },
 		/// Request completed
 		RequestCompleted { request_id: u32, inference_id: u32 },
-		/// Node identity registered
-		NodeIdentityRegistered { account: T::AccountId, peer_id: BoundedVec<u8, ConstU32<64>>, node_type: u8 },
-		/// Node slashed due to worker/validator slashing
-		NodeSlashed { account: T::AccountId, peer_id: BoundedVec<u8, ConstU32<64>>, reason: u8 },
 	}
 
 	/// Errors that can be returned by this pallet
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Worker already registered
-		WorkerAlreadyRegistered,
-		/// Validator already registered
-		ValidatorAlreadyRegistered,
-		/// Worker not found
-		WorkerNotFound,
-		/// Validator not found
-		ValidatorNotFound,
+		/// AIWorker already registered
+		AIWorkerAlreadyRegistered,
+		/// AIValidator already registered
+		AIValidatorAlreadyRegistered,
+		/// AIWorker not found
+		AIWorkerNotFound,
+		/// AIValidator not found
+		AIValidatorNotFound,
 		/// Inference not found
 		InferenceNotFound,
 		/// Request not found
@@ -236,82 +204,76 @@ pub mod pallet {
 		InferenceNotPending,
 		/// Invalid model parameters
 		InvalidModelParameters,
-		/// Worker queue full
-		WorkerQueueFull,
-		/// No available workers
-		NoAvailableWorkers,
+		/// AIWorker queue full
+		AIWorkerQueueFull,
+		/// No available AIWorkers
+		NoAvailableAIWorkers,
 		/// Request already assigned
 		RequestAlreadyAssigned,
-		/// Request not assigned to this worker
+		/// Request not assigned to this AIWorker
 		RequestNotAssigned,
 		/// Prompt too long
 		PromptTooLong,
 		/// Output too long
 		OutputTooLong,
-		/// Worker is banned
-		WorkerBanned,
+		/// AIWorker is banned
+		AIWorkerBanned,
 		/// Challenge output too long
 		ChallengeOutputTooLong,
-		/// Node identity already registered
-		NodeIdentityAlreadyRegistered,
-		/// Invalid node identity format
-		InvalidNodeIdentity,
-		/// Node identity not found
-		NodeIdentityNotFound,
-		/// Invalid peer ID format
-		InvalidPeerId,
-		/// Node already slashed
-		NodeAlreadySlashed,
+		/// Model hash too long or invalid
+		InvalidModelHash,
+		/// Challenge period not yet ended
+		ChallengePeriodNotEnded,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Register as a worker with stake
+		/// Register as an AIWorker with stake (application layer entity, not a consensus node)
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn register_worker(
+		pub fn register_ai_worker(
 			origin: OriginFor<T>,
 			stake: <T::Currency as Currency<T::AccountId>>::Balance,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(!Workers::<T>::contains_key(&who), Error::<T>::WorkerAlreadyRegistered);
-			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
-			ensure!(stake >= T::MinWorkerStake::get(), Error::<T>::InsufficientStake);
-			
+
+			ensure!(!AIWorkers::<T>::contains_key(&who), Error::<T>::AIWorkerAlreadyRegistered);
+			ensure!(!BannedAIWorkers::<T>::contains_key(&who), Error::<T>::AIWorkerBanned);
+			ensure!(stake >= T::MinAIWorkerStake::get(), Error::<T>::InsufficientStake);
+
 			// Reserve the stake
 			T::Currency::reserve(&who, stake)?;
-			
-			Workers::<T>::insert(&who, stake);
-			WorkerQueues::<T>::insert(&who, BoundedVec::new());
-			WorkerStatus::<T>::insert(&who, false);
-			
-			Self::deposit_event(Event::WorkerRegistered { who, stake });
+
+			AIWorkers::<T>::insert(&who, stake);
+			AIWorkerQueues::<T>::insert(&who, BoundedVec::new());
+			AIWorkerStatus::<T>::insert(&who, false);
+
+			Self::deposit_event(Event::AIWorkerRegistered { who, stake });
 			Ok(())
 		}
 
-		/// Register as a validator with stake
+		/// Register as an AIValidator with stake (application layer entity, not a consensus node)
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn register_validator(
+		pub fn register_ai_validator(
 			origin: OriginFor<T>,
 			stake: <T::Currency as Currency<T::AccountId>>::Balance,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(!Validators::<T>::contains_key(&who), Error::<T>::ValidatorAlreadyRegistered);
+
+			ensure!(!AIValidators::<T>::contains_key(&who), Error::<T>::AIValidatorAlreadyRegistered);
 			ensure!(stake >= T::MinChallengeStake::get(), Error::<T>::InsufficientStake);
-			
+
 			// Reserve the stake
 			T::Currency::reserve(&who, stake)?;
-			
-			Validators::<T>::insert(&who, stake);
-			
-			Self::deposit_event(Event::ValidatorRegistered { who, stake });
+
+			AIValidators::<T>::insert(&who, stake);
+
+			Self::deposit_event(Event::AIValidatorRegistered { who, stake });
 			Ok(())
 		}
 
-		/// Submit an inference request to a specific worker
+		/// Submit an inference request to a specific AIWorker
 		#[pallet::call_index(2)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn submit_request(
@@ -321,18 +283,18 @@ pub mod pallet {
 			model_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&target_worker), Error::<T>::WorkerNotFound);
-			ensure!(!BannedWorkers::<T>::contains_key(&target_worker), Error::<T>::WorkerBanned);
-			
+
+			ensure!(AIWorkers::<T>::contains_key(&target_worker), Error::<T>::AIWorkerNotFound);
+			ensure!(!BannedAIWorkers::<T>::contains_key(&target_worker), Error::<T>::AIWorkerBanned);
+
 			let bounded_prompt = prompt;
-			
+
 			let request_id = NextRequestId::<T>::get();
 			NextRequestId::<T>::put(request_id + 1);
-			
+
 			let current_block = frame_system::Pallet::<T>::block_number();
 			let block_number: u32 = current_block.saturated_into();
-			
+
 			let request = InferenceRequest {
 				customer: who.clone(),
 				target_worker: target_worker.clone(),
@@ -341,116 +303,124 @@ pub mod pallet {
 				status: RequestStatus::Queued,
 				created_at: block_number,
 			};
-			
+
 			InferenceRequests::<T>::insert(&request_id, &request);
 			RequestWorkerMap::<T>::insert(&request_id, &target_worker);
-			
-			// Add to worker's queue
-			WorkerQueues::<T>::try_mutate(&target_worker, |queue_opt| {
-				let queue = queue_opt.as_mut().ok_or(Error::<T>::WorkerNotFound)?;
-				queue.try_push(request_id).map_err(|_| Error::<T>::WorkerQueueFull)?;
+
+			// Add to AIWorker's queue
+			AIWorkerQueues::<T>::try_mutate(&target_worker, |queue_opt| {
+				let queue = queue_opt.as_mut().ok_or(Error::<T>::AIWorkerNotFound)?;
+				queue.try_push(request_id).map_err(|_| Error::<T>::AIWorkerQueueFull)?;
 				Ok::<(), Error<T>>(())
 			})?;
-			
-			Self::deposit_event(Event::RequestSubmitted { 
-				request_id, 
-				customer: who, 
-				model_id 
+
+			Self::deposit_event(Event::RequestSubmitted {
+				request_id,
+				customer: who,
+				model_id
 			});
-			Self::deposit_event(Event::RequestAssigned { 
-				request_id, 
-				worker: target_worker 
+			Self::deposit_event(Event::RequestAssigned {
+				request_id,
+				worker: target_worker
 			});
-			
+
 			Ok(())
 		}
 
-		/// Update worker online status
+		/// Update AIWorker online status
 		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn update_worker_status(
+		pub fn update_ai_worker_status(
 			origin: OriginFor<T>,
 			online: bool,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&who), Error::<T>::WorkerNotFound);
-			
-			WorkerStatus::<T>::insert(&who, online);
-			
-			Self::deposit_event(Event::WorkerStatusUpdated { 
-				worker: who, 
-				online 
+
+			ensure!(AIWorkers::<T>::contains_key(&who), Error::<T>::AIWorkerNotFound);
+
+			AIWorkerStatus::<T>::insert(&who, online);
+
+			Self::deposit_event(Event::AIWorkerStatusUpdated {
+				worker: who,
+				online
 			});
-			
+
 			Ok(())
 		}
 
-		/// Submit inference result for a request
+		/// Submit inference result with cryptographic commitment (immediately returns to citizen)
 		#[pallet::call_index(4)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn submit_inference(
 			origin: OriginFor<T>,
 			request_id: u32,
 			output: BoundedVec<u8, ConstU32<4096>>,
+			model_hash: BoundedVec<u8, ConstU32<64>>, // Cryptographic commitment to model used
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Workers::<T>::contains_key(&who), Error::<T>::WorkerNotFound);
-			ensure!(!BannedWorkers::<T>::contains_key(&who), Error::<T>::WorkerBanned);
-			
+
+			ensure!(AIWorkers::<T>::contains_key(&who), Error::<T>::AIWorkerNotFound);
+			ensure!(!BannedAIWorkers::<T>::contains_key(&who), Error::<T>::AIWorkerBanned);
+
 			let request = InferenceRequests::<T>::get(&request_id)
 				.ok_or(Error::<T>::RequestNotFound)?;
-			
+
 			ensure!(request.target_worker == who, Error::<T>::RequestNotAssigned);
 			ensure!(request.status == RequestStatus::Queued, Error::<T>::RequestAlreadyAssigned);
-			
+
 			let bounded_output = output;
-			
+
 			let inference_id = NextInferenceId::<T>::get();
 			NextInferenceId::<T>::put(inference_id + 1);
-			
+
 			let current_block = frame_system::Pallet::<T>::block_number();
 			let block_number: u32 = current_block.saturated_into();
-			
+
+			// Calculate challenge deadline (7 days per specification)
+			let challenge_period: u32 = T::ChallengePeriod::get().saturated_into();
+			let challenge_deadline = block_number.saturating_add(challenge_period);
+
 			let result = InferenceResult {
 				request_id,
 				worker: who.clone(),
 				output: bounded_output,
-				status: InferenceStatus::Pending,
+				model_hash,
+				status: InferenceStatus::Pending, // Optimistic: assumed valid unless challenged
 				submitted_at: block_number,
+				challenge_deadline,
 			};
-			
+
 			InferenceResults::<T>::insert(&inference_id, &result);
-			
+
 			// Update request status
 			InferenceRequests::<T>::try_mutate(&request_id, |req_opt| {
 				let req = req_opt.as_mut().ok_or(Error::<T>::RequestNotFound)?;
 				req.status = RequestStatus::Completed;
 				Ok::<(), Error<T>>(())
 			})?;
-			
-			// Remove from worker queue
-			WorkerQueues::<T>::try_mutate(&who, |queue_opt| {
-				let queue = queue_opt.as_mut().ok_or(Error::<T>::WorkerNotFound)?;
+
+			// Remove from AIWorker queue
+			AIWorkerQueues::<T>::try_mutate(&who, |queue_opt| {
+				let queue = queue_opt.as_mut().ok_or(Error::<T>::AIWorkerNotFound)?;
 				queue.retain(|&id| id != request_id);
 				Ok::<(), Error<T>>(())
 			})?;
-			
-			Self::deposit_event(Event::InferenceSubmitted { 
-				inference_id, 
+
+			Self::deposit_event(Event::InferenceSubmitted {
+				inference_id,
 				request_id,
-				worker: who 
+				worker: who,
+				challenge_deadline,
 			});
-			Self::deposit_event(Event::RequestCompleted { 
-				request_id, 
-				inference_id 
+			Self::deposit_event(Event::RequestCompleted {
+				request_id,
+				inference_id
 			});
-			
+
 			Ok(())
 		}
 
-		/// Challenge an inference with expected output
+		/// Challenge an inference with expected output (AIValidator disputes AIWorker submission)
 		#[pallet::call_index(5)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn challenge_inference(
@@ -459,221 +429,192 @@ pub mod pallet {
 			expected_output: BoundedVec<u8, ConstU32<4096>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
-			ensure!(Validators::<T>::contains_key(&who), Error::<T>::ValidatorNotFound);
-			
+
+			let validator_stake = AIValidators::<T>::get(&who)
+				.ok_or(Error::<T>::AIValidatorNotFound)?;
+
 			let inference = InferenceResults::<T>::get(&inference_id)
 				.ok_or(Error::<T>::InferenceNotFound)?;
-			
+
 			ensure!(inference.status == InferenceStatus::Pending, Error::<T>::InferenceNotPending);
 			ensure!(inference.worker != who, Error::<T>::CannotChallengeSelf);
-			
+
 			let current_block = frame_system::Pallet::<T>::block_number();
 			let block_number: u32 = current_block.saturated_into();
-			
+
+			// Ensure within 7-day challenge period
+			ensure!(block_number <= inference.challenge_deadline, Error::<T>::ChallengePeriodExpired);
+
 			let challenge = Challenge {
 				validator: who.clone(),
 				expected_output: expected_output.clone(),
 				submitted_at: block_number,
+				stake: validator_stake, // Include stake for weighted consensus
 			};
-			
-			// Check if validator already challenged this inference
+
+			// Check if AIValidator already challenged this inference
 			if let Some(existing_challenges) = InferenceChallenges::<T>::get(&inference_id) {
 				ensure!(!existing_challenges.iter().any(|c| c.validator == who), Error::<T>::AlreadyChallenged);
 			}
-			
+
 			// Add challenge to storage
 			InferenceChallenges::<T>::try_mutate(&inference_id, |challenges_opt| {
 				let challenges = challenges_opt.get_or_insert_with(|| BoundedVec::new());
-				challenges.try_push(challenge).map_err(|_| Error::<T>::WorkerQueueFull)?;
+				challenges.try_push(challenge).map_err(|_| Error::<T>::AIWorkerQueueFull)?;
 				Ok::<(), Error<T>>(())
 			})?;
-			
+
 			// Update inference status to challenged
 			InferenceResults::<T>::try_mutate(&inference_id, |result_opt| {
 				let result = result_opt.as_mut().ok_or(Error::<T>::InferenceNotFound)?;
 				result.status = InferenceStatus::Challenged;
 				Ok::<(), Error<T>>(())
 			})?;
-			
-			// Check for consensus after adding challenge
+
+			// Check for 51% consensus after adding challenge
 			Self::check_challenge_consensus(inference_id, expected_output)?;
-			
+
 			Self::deposit_event(Event::InferenceChallenged { inference_id, validator: who });
 			Ok(())
 		}
 
-		/// Validate an inference as correct
+		/// Finalize inference after challenge period ends (anyone can call to trigger finalization)
 		#[pallet::call_index(6)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn validate_inference(
+		pub fn finalize_inference(
 			origin: OriginFor<T>,
 			inference_id: u32,
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-			
-			ensure!(Validators::<T>::contains_key(&who), Error::<T>::ValidatorNotFound);
-			
-			Self::deposit_event(Event::InferenceValidated { inference_id, validator: who });
-			Ok(())
-		}
+			let _who = ensure_signed(origin)?;
 
-		/// Register or update node identity for an existing worker/validator
-		#[pallet::call_index(7)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn register_node_identity(
-			origin: OriginFor<T>,
-			peer_id: BoundedVec<u8, ConstU32<64>>,
-			endpoint: BoundedVec<u8, ConstU32<256>>,
-			node_type: u8, // 0=Worker, 1=Validator, 2=WorkerValidator
-		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-			
-			// Ensure the account is either a worker or validator
-			ensure!(
-				Workers::<T>::contains_key(&who) || Validators::<T>::contains_key(&who),
-				Error::<T>::WorkerNotFound
-			);
-			
-			// Convert node_type u8 to enum
-			let node_type_enum = match node_type {
-				0 => NodeType::Worker,
-				1 => NodeType::Validator,
-				2 => NodeType::WorkerValidator,
-				_ => return Err(Error::<T>::InvalidNodeIdentity.into()),
-			};
-			
-			// Check if peer_id is already registered to another account
-			if let Some(existing_account) = NodeToAccount::<T>::get(&peer_id) {
-				ensure!(existing_account == who, Error::<T>::NodeIdentityAlreadyRegistered);
-			}
-			
-			// Remove old mapping if exists
-			if let Some(old_identity) = NodeIdentities::<T>::get(&who) {
-				NodeToAccount::<T>::remove(&old_identity.peer_id);
-			}
-			
-			let node_identity = NodeIdentity {
-				peer_id: peer_id.clone(),
-				endpoint,
-				node_type: node_type_enum.clone(),
-			};
-			
-			NodeIdentities::<T>::insert(&who, &node_identity);
-			NodeToAccount::<T>::insert(&peer_id, &who);
-			
-			Self::deposit_event(Event::NodeIdentityRegistered { 
-				account: who, 
-				peer_id, 
-				node_type 
+			let inference = InferenceResults::<T>::get(&inference_id)
+				.ok_or(Error::<T>::InferenceNotFound)?;
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let block_number: u32 = current_block.saturated_into();
+
+			// Ensure challenge period has ended
+			ensure!(block_number > inference.challenge_deadline, Error::<T>::ChallengePeriodNotEnded);
+
+			// Only finalize if still pending (not already slashed or finalized)
+			ensure!(inference.status == InferenceStatus::Pending, Error::<T>::InferenceNotPending);
+
+			// Update status to finalized
+			InferenceResults::<T>::try_mutate(&inference_id, |result_opt| {
+				let result = result_opt.as_mut().ok_or(Error::<T>::InferenceNotFound)?;
+				result.status = InferenceStatus::Finalized;
+				Ok::<(), Error<T>>(())
+			})?;
+
+			Self::deposit_event(Event::InferenceFinalized {
+				inference_id,
+				worker: inference.worker.clone()
 			});
-			
+
 			Ok(())
 		}
 	}
 
 	impl<T: Config> Pallet<T> {
-		/// Check if challenge consensus is reached (2/3+ validators agree)
+		/// Check if challenge consensus is reached (51%+ of staked validator weight agrees)
 		fn check_challenge_consensus(
 			inference_id: u32,
 			expected_output: BoundedVec<u8, ConstU32<4096>>,
 		) -> DispatchResult {
 			let challenges = InferenceChallenges::<T>::get(&inference_id)
 				.unwrap_or_default();
-			
-			// Count validators with matching expected output
-			let matching_challenges = challenges.iter()
+
+			// Calculate total stake weight of validators challenging with matching expected output
+			let challenging_stake_weight: u128 = challenges.iter()
 				.filter(|c| c.expected_output == expected_output)
-				.count() as u32;
-			
-			// Get total number of registered validators
-			let total_validators = Validators::<T>::iter().count() as u32;
-			
-			// Check if we have 2/3+ consensus (using ceiling division)
-			let required_consensus = (total_validators * 2 + 2) / 3; // Ceiling of 2/3
-			
-			if matching_challenges >= required_consensus && total_validators > 0 {
+				.map(|c| {
+					let balance: u128 = c.stake.saturated_into();
+					balance
+				})
+				.sum();
+
+			// Get total stake of all registered AIValidators
+			let total_validator_stake: u128 = AIValidators::<T>::iter()
+				.map(|(_, stake)| {
+					let balance: u128 = stake.saturated_into();
+					balance
+				})
+				.sum();
+
+			// Check if we have 51%+ consensus (using threshold from config)
+			let threshold_percent = T::SlashThreshold::get() as u128;
+			let required_stake = (total_validator_stake * threshold_percent) / 100;
+
+			if challenging_stake_weight >= required_stake && total_validator_stake > 0 {
 				Self::deposit_event(Event::ChallengeConsensusReached {
 					inference_id,
-					challenge_count: matching_challenges,
-					total_validators,
+					challenge_stake_weight: challenging_stake_weight,
+					total_validator_stake,
 				});
-				
+
 				// Execute slashing and banning
-				Self::slash_and_ban_worker(inference_id)?;
+				Self::slash_and_ban_ai_worker(inference_id)?;
 			}
-			
+
 			Ok(())
 		}
-		
-		/// Slash worker stake and ban them from the network, including node-level slashing
-		fn slash_and_ban_worker(inference_id: u32) -> DispatchResult {
+
+		/// Slash AIWorker stake and ban them from the network after successful challenge
+		fn slash_and_ban_ai_worker(inference_id: u32) -> DispatchResult {
 			let inference = InferenceResults::<T>::get(&inference_id)
 				.ok_or(Error::<T>::InferenceNotFound)?;
-			
+
 			let worker = &inference.worker;
-			
-			// Get worker's stake
-			let stake = Workers::<T>::get(worker)
-				.ok_or(Error::<T>::WorkerNotFound)?;
-			
-			// Slash the worker's stake (confiscate it)
+
+			// Get AIWorker's stake
+			let stake = AIWorkers::<T>::get(worker)
+				.ok_or(Error::<T>::AIWorkerNotFound)?;
+
+			// Slash the AIWorker's stake (confiscate it)
 			let _ = T::Currency::slash_reserved(worker, stake);
-			
-			// Ban the worker
-			BannedWorkers::<T>::insert(worker, true);
-			
-			// Slash the associated node if it exists
-			if let Some(node_identity) = NodeIdentities::<T>::get(worker) {
-				SlashedNodes::<T>::insert(&node_identity.peer_id, true);
-				
-				Self::deposit_event(Event::NodeSlashed {
-					account: worker.clone(),
-					peer_id: node_identity.peer_id,
-					reason: 0, // WorkerSlashed
-				});
-			}
-			
-			// Remove worker from active workers
-			Workers::<T>::remove(worker);
-			WorkerQueues::<T>::remove(worker);
-			WorkerStatus::<T>::remove(worker);
-			
+
+			// Ban the AIWorker
+			BannedAIWorkers::<T>::insert(worker, true);
+
+			// Remove AIWorker from active workers
+			AIWorkers::<T>::remove(worker);
+			AIWorkerQueues::<T>::remove(worker);
+			AIWorkerStatus::<T>::remove(worker);
+
 			// Update inference status to slashed
 			InferenceResults::<T>::try_mutate(&inference_id, |result_opt| {
 				let result = result_opt.as_mut().ok_or(Error::<T>::InferenceNotFound)?;
 				result.status = InferenceStatus::Slashed;
 				Ok::<(), Error<T>>(())
 			})?;
-			
-			Self::deposit_event(Event::WorkerSlashed {
+
+			Self::deposit_event(Event::AIWorkerSlashed {
 				worker: worker.clone(),
 				inference_id,
 				amount: stake,
 			});
-			
-			Self::deposit_event(Event::WorkerBanned {
+
+			Self::deposit_event(Event::AIWorkerBanned {
 				worker: worker.clone(),
 				inference_id,
 			});
-			
+
 			Ok(())
 		}
-		
-		/// Check if a node is slashed
-		pub fn is_node_slashed(peer_id: &BoundedVec<u8, ConstU32<64>>) -> bool {
-			SlashedNodes::<T>::get(peer_id).unwrap_or(false)
+
+		/// Get inference result for a given inference ID
+		pub fn get_inference_result(inference_id: u32) -> Option<InferenceResult<T::AccountId>> {
+			InferenceResults::<T>::get(inference_id)
 		}
-		
-		/// Get node identity for account
-		pub fn get_node_identity(account: &T::AccountId) -> Option<NodeIdentity> {
-			NodeIdentities::<T>::get(account)
+
+		/// Check if an AIWorker is registered
+		pub fn is_ai_worker_registered(account: &T::AccountId) -> bool {
+			AIWorkers::<T>::contains_key(account)
 		}
-		
-		/// Get account for node peer_id
-		pub fn get_account_for_node(peer_id: &BoundedVec<u8, ConstU32<64>>) -> Option<T::AccountId> {
-			NodeToAccount::<T>::get(peer_id)
+
+		/// Check if an AIValidator is registered
+		pub fn is_ai_validator_registered(account: &T::AccountId) -> bool {
+			AIValidators::<T>::contains_key(account)
 		}
-		
 	}
 }

@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# QX Chain Single Node Startup Script
-# Start a single worker or validator node with integrated blockchain
-# Run multiple times in different terminals to build your network
+# QX Chain Node Startup Script
+# Starts a single QX Chain blockchain node in development mode
 
 set -e
 
@@ -12,270 +11,199 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Configuration
-OLLAMA_PORT=11434
-LOG_DIR="./logs"
+# Default configuration
+DEFAULT_RPC_PORT=9944
+DEFAULT_WS_PORT=9944  # Same as RPC for qxchain
+DEFAULT_P2P_PORT=30333
+DEFAULT_CHAIN="dev"
+DEFAULT_CONSENSUS="instant-seal"
 
-# Create logs directory
-mkdir -p $LOG_DIR
+# Parse command line arguments
+RPC_PORT=$DEFAULT_RPC_PORT
+WS_PORT=$DEFAULT_WS_PORT
+P2P_PORT=$DEFAULT_P2P_PORT
+CHAIN=$DEFAULT_CHAIN
+CONSENSUS=$DEFAULT_CONSENSUS
+PURGE_CHAIN=false
+VERBOSE=false
 
-# Function to check if a port is in use
-port_in_use() {
-    lsof -Pi :$1 -sTCP:LISTEN -t >/dev/null 2>/dev/null
-}
-
-# Function to check and start Ollama
-check_and_start_ollama() {
-    if port_in_use $OLLAMA_PORT; then
-        echo -e "${GREEN}✅ Ollama is already running on port $OLLAMA_PORT${NC}"
-        return 0
-    fi
-    
-    echo -e "${YELLOW}🔄 Ollama not running, attempting to start...${NC}"
-    
-    # Check if ollama command is available
-    if ! command -v ollama &> /dev/null; then
-        echo -e "${RED}❌ Ollama command not found${NC}"
-        echo -e "${YELLOW}💡 Please install Ollama first: https://ollama.com${NC}"
-        return 1
-    fi
-    
-    # Start Ollama in background
-    echo -e "${BLUE}🚀 Starting Ollama server...${NC}"
-    nohup ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
-    
-    # Wait for Ollama to start
-    echo -e "${YELLOW}⏳ Waiting for Ollama to be ready...${NC}"
-    local attempts=0
-    local max_attempts=30
-    
-    while [ $attempts -lt $max_attempts ]; do
-        if port_in_use $OLLAMA_PORT; then
-            echo -e "${GREEN}✅ Ollama started successfully${NC}"
-            sleep 2  # Give it a moment to fully initialize
-            return 0
-        fi
-        attempts=$((attempts + 1))
-        sleep 1
-    done
-    
-    echo -e "${RED}❌ Failed to start Ollama within timeout${NC}"
-    return 1
-}
-
-# Function to ensure required model is available
-ensure_ollama_model() {
-    local model="gemma3:1b"
-    
-    echo -e "${BLUE}🔍 Checking if model $model is available...${NC}"
-    
-    # Check if model exists
-    local models_response=$(curl -s "http://localhost:$OLLAMA_PORT/api/tags" 2>/dev/null)
-    if [[ "$models_response" == *"$model"* ]]; then
-        echo -e "${GREEN}✅ Model $model is available${NC}"
-        return 0
-    fi
-    
-    echo -e "${YELLOW}📥 Model $model not found, downloading...${NC}"
-    echo -e "${BLUE}💡 This may take a few minutes on first run${NC}"
-    
-    # Pull the model
-    ollama pull "$model"
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Model $model downloaded successfully${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ Failed to download model $model${NC}"
-        return 1
-    fi
-}
-
-# Function to check prerequisites
-check_prerequisites() {
-    # Check Python virtual environment
-    if [ ! -d ".venv" ]; then
-        echo -e "${RED}❌ Python virtual environment not found: .venv${NC}"
-        echo -e "${YELLOW}💡 Please set up the Python environment first${NC}"
-        exit 1
-    fi
-    
-    # Check QX Chain binary
-    if [ ! -f "../target/release/qxchain" ]; then
-        echo -e "${RED}❌ QX Chain binary not found: ../target/release/qxchain${NC}"
-        echo -e "${YELLOW}💡 Please build the chain first with: cargo build --release${NC}"
-        exit 1
-    fi
-}
-
-# Function to show usage
 show_usage() {
-    echo "QX Chain Single Node Startup"
+    echo "QX Chain Node Startup Script"
     echo ""
-    echo "Usage:"
-    echo "  $0 worker [options]      # Start a worker node"
-    echo "  $0 validator [options]   # Start a validator node"
+    echo "Usage: $0 [options]"
     echo ""
-    echo "Worker Options:"
-    echo "  --seed SEED              # Account seed (default: //Bob)"
-    echo ""
-    echo "Validator Options:"
-    echo "  --seed SEED              # Account seed (default: //Charlie)"
+    echo "Options:"
+    echo "  --rpc-port PORT      RPC/WebSocket port (default: 9944)"
+    echo "  --p2p-port PORT      P2P networking port (default: 30333)"
+    echo "  --chain CHAIN        Chain specification: dev, local (default: dev)"
+    echo "  --consensus TYPE     Consensus: instant-seal, manual-seal (default: instant-seal)"
+    echo "  --purge-chain        Remove all chain data before starting"
+    echo "  --verbose            Enable verbose logging"
+    echo "  --help              Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 worker                                    # Basic worker with //Bob"
-    echo "  $0 worker --seed //Dave                      # Worker with Dave account"
-    echo "  $0 validator --seed //Alice      # Validator with Alice account"
+    echo "  $0                           # Start with defaults"
+    echo "  $0 --purge-chain            # Start fresh (remove old data)"
+    echo "  $0 --rpc-port 9945          # Use different RPC port"
+    echo "  $0 --consensus manual-seal  # Use manual seal for testing"
     echo ""
-    echo "Network Building:"
-    echo "  Terminal 1: $0 worker --seed //Bob"
-    echo "  Terminal 2: $0 worker --seed //Dave"
-    echo "  Terminal 3: $0 validator --seed //Charlie"
-    echo "  Terminal 4: $0 validator --seed //Alice"
 }
 
-# Function to start worker
-start_worker() {
-    local seed="//Bob"
-    
-    # Parse worker-specific options
-    shift # Remove 'worker' from args
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --seed)
-                seed="$2"
-                shift 2
-                ;;
-            *)
-                echo -e "${RED}❌ Unknown worker option: $1${NC}"
-                show_usage
-                exit 1
-                ;;
-        esac
-    done
-    
-    # Generate node name
-    local node_name="worker_$(echo $seed | tr -d '/' | tr '[:upper:]' '[:lower:]')_$(date +%s)"
-    
-    echo -e "${CYAN}🤖 Starting Worker Node${NC}"
-    echo -e "${BLUE}═══════════════════════════${NC}"
-    
-    echo -e "${BLUE}📋 Node Name: $node_name${NC}"
-    echo -e "${BLUE}📋 Account: $seed${NC}"
-    echo -e "${BLUE}📋 Mode: Automatic Queue Listener${NC}"
-    echo ""
-    
-    # Build command
-    local cmd="python ollama_worker.py --seed=\"$seed\" --node-name=\"$node_name\""
-    
-    # Check and start Ollama for workers
-    echo -e "${BLUE}🔧 Preparing Ollama for worker...${NC}"
-    if ! check_and_start_ollama; then
-        echo -e "${RED}❌ Failed to start Ollama. Worker may not function properly.${NC}"
-        echo -e "${YELLOW}💡 Continuing anyway, but AI processing will fail${NC}"
-    else
-        # Ensure the required model is available
-        if ! ensure_ollama_model; then
-            echo -e "${YELLOW}⚠️ Model download failed, but continuing...${NC}"
-        fi
-    fi
-    echo ""
-    
-    echo -e "${YELLOW}🚀 Starting worker with integrated blockchain node...${NC}"
-    echo -e "${BLUE}📋 Command: $cmd${NC}"
-    echo -e "${YELLOW}💡 Node will run in foreground. Press Ctrl+C to stop gracefully.${NC}"
-    echo -e "${YELLOW}📄 Each component logs to its own file in $LOG_DIR/${NC}"
-    echo ""
-    
-    # Execute command
-    eval $cmd
-}
-
-# Function to start validator
-start_validator() {
-    local seed="//Charlie"
-    
-    # Parse validator-specific options
-    shift # Remove 'validator' from args
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --seed)
-                seed="$2"
-                shift 2
-                ;;
-            *)
-                echo -e "${RED}❌ Unknown validator option: $1${NC}"
-                show_usage
-                exit 1
-                ;;
-        esac
-    done
-    
-    # Generate node name
-    local node_name="validator_$(echo $seed | tr -d '/' | tr '[:upper:]' '[:lower:]')_$(date +%s)"
-    
-    echo -e "${PURPLE}🛡️ Starting Validator Node${NC}"
-    echo -e "${BLUE}═════════════════════════════${NC}"
-    echo -e "${BLUE}📋 Node Name: $node_name${NC}"
-    echo -e "${BLUE}📋 Account: $seed${NC}"
-    echo -e "${BLUE}📋 Mode: Interactive${NC}"
-    echo ""
-    
-    # Build command
-    local cmd="python validator.py --seed=\"$seed\" --node-name=\"$node_name\""
-    
-    echo -e "${YELLOW}🚀 Starting validator with integrated blockchain node...${NC}"
-    echo -e "${BLUE}📋 Command: $cmd${NC}"
-    echo -e "${YELLOW}💡 Node will run in foreground. Press Ctrl+C to stop gracefully.${NC}"
-    echo -e "${YELLOW}📄 Each component logs to its own file in $LOG_DIR/${NC}"
-    echo ""
-    
-    # Execute command
-    eval $cmd
-}
-
-# Main script execution
-main() {
-    # Get script directory and change to it
-    SCRIPT_DIR="$(dirname "$0")"
-    cd "$SCRIPT_DIR"
-    
-    # Check prerequisites
-    check_prerequisites
-    
-    # Activate Python environment
-    source .venv/bin/activate
-    
-    # Check if no arguments provided
-    if [ $# -eq 0 ]; then
-        echo -e "${RED}❌ No node type specified${NC}"
-        echo ""
-        show_usage
-        exit 1
-    fi
-    
-    # Parse main command
+# Parse arguments
+while [[ $# -gt 0 ]]; do
     case $1 in
-        worker)
-            start_worker "$@"
+        --rpc-port)
+            RPC_PORT="$2"
+            WS_PORT="$2"  # qxchain uses same port for RPC and WS
+            shift 2
             ;;
-        validator)
-            start_validator "$@"
+        --p2p-port)
+            P2P_PORT="$2"
+            shift 2
+            ;;
+        --chain)
+            CHAIN="$2"
+            shift 2
+            ;;
+        --consensus)
+            CONSENSUS="$2"
+            shift 2
+            ;;
+        --purge-chain)
+            PURGE_CHAIN=true
+            shift
+            ;;
+        --verbose)
+            VERBOSE=true
+            shift
             ;;
         --help|-h)
             show_usage
+            exit 0
             ;;
         *)
-            echo -e "${RED}❌ Unknown node type: $1${NC}"
+            echo -e "${RED}❌ Unknown option: $1${NC}"
             echo ""
             show_usage
             exit 1
             ;;
     esac
+done
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Check if binary exists
+BINARY="$PROJECT_ROOT/target/release/qxchain"
+if [ ! -f "$BINARY" ]; then
+    echo -e "${RED}❌ QX Chain binary not found at: $BINARY${NC}"
+    echo -e "${YELLOW}Please build the chain first with: ./build_chain.sh${NC}"
+    exit 1
+fi
+
+# Function to check if port is in use
+check_port() {
+    local port=$1
+    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-# Run main function with all arguments
-main "$@"
+# Check for port conflicts
+if check_port $RPC_PORT; then
+    echo -e "${RED}❌ Port $RPC_PORT is already in use${NC}"
+    echo -e "${YELLOW}Please stop the existing service or use --rpc-port to specify a different port${NC}"
+    exit 1
+fi
+
+if check_port $P2P_PORT; then
+    echo -e "${RED}❌ Port $P2P_PORT is already in use${NC}"
+    echo -e "${YELLOW}Please stop the existing service or use --p2p-port to specify a different port${NC}"
+    exit 1
+fi
+
+# Show startup banner
+echo -e "${BLUE}═══════════════════════════════════════${NC}"
+echo -e "${BLUE}       QX Chain Node Starting${NC}"
+echo -e "${BLUE}═══════════════════════════════════════${NC}"
+echo ""
+
+# Display configuration
+echo -e "${CYAN}📋 Configuration:${NC}"
+echo -e "  Chain:          ${GREEN}$CHAIN${NC}"
+echo -e "  Consensus:      ${GREEN}$CONSENSUS${NC}"
+echo -e "  RPC/WS Port:    ${GREEN}$RPC_PORT${NC}"
+echo -e "  P2P Port:       ${GREEN}$P2P_PORT${NC}"
+echo -e "  Data Directory: ${GREEN}$HOME/.local/share/qxchain${NC}"
+echo ""
+
+# Purge chain data if requested
+if [ "$PURGE_CHAIN" = true ]; then
+    echo -e "${YELLOW}🗑️  Purging chain data...${NC}"
+    $BINARY purge-chain --chain=$CHAIN -y 2>/dev/null || true
+    echo -e "${GREEN}✅ Chain data purged${NC}"
+    echo ""
+fi
+
+# Build the command
+CMD="$BINARY"
+CMD="$CMD --chain=$CHAIN"
+CMD="$CMD --rpc-port=$RPC_PORT"
+CMD="$CMD --port=$P2P_PORT"
+CMD="$CMD --rpc-cors=all"
+CMD="$CMD --rpc-methods=unsafe"
+CMD="$CMD --rpc-external"
+CMD="$CMD --consensus=$CONSENSUS"
+
+# Add Alice key for dev chain (gives us a funded account)
+if [ "$CHAIN" = "dev" ]; then
+    CMD="$CMD --alice --dev"
+fi
+
+# Add node key file
+CMD="$CMD --node-key-file=$PROJECT_ROOT/node-key"
+
+# Add verbose logging if requested
+if [ "$VERBOSE" = true ]; then
+    CMD="$CMD -lruntime=debug"
+else
+    CMD="$CMD -linfo"
+fi
+
+# Show startup message
+echo -e "${YELLOW}🚀 Starting QX Chain node...${NC}"
+echo -e "${BLUE}📝 Command: $CMD${NC}"
+echo ""
+echo -e "${GREEN}═══════════════════════════════════════${NC}"
+echo -e "${GREEN}Node Information:${NC}"
+echo -e "  WebSocket:   ${CYAN}ws://localhost:$RPC_PORT${NC}"
+echo -e "  HTTP RPC:    ${CYAN}http://localhost:$RPC_PORT${NC}"
+echo -e "${GREEN}═══════════════════════════════════════${NC}"
+echo ""
+echo -e "${YELLOW}💡 Press Ctrl+C to stop the node${NC}"
+echo ""
+
+# Pre-funded test accounts
+echo -e "${BLUE}📦 Pre-funded Test Accounts:${NC}"
+echo -e "  Alice:   5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY (1,000,000 tokens)"
+echo -e "  Bob:     5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty (1,000,000 tokens)"
+echo -e "  Charlie: 5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y (1,000,000 tokens)"
+echo ""
+
+# Instructions for interacting with the chain
+echo -e "${CYAN}📖 To interact with the chain:${NC}"
+echo -e "  1. In a new terminal, navigate to: ${GREEN}cd ../qxchain_connect${NC}"
+echo -e "  2. Start a worker:    ${GREEN}./cli.sh worker --seed //Bob${NC}"
+echo -e "  3. Submit requests:   ${GREEN}./cli.sh customer --seed //Alice${NC}"
+echo -e "  4. Validate results:  ${GREEN}./cli.sh validator --seed //Charlie${NC}"
+echo ""
+echo -e "${BLUE}═══════════════════════════════════════${NC}"
+echo ""
+
+# Execute the command
+exec $CMD

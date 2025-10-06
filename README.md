@@ -1,164 +1,44 @@
-# QX Chain - Decentralized AI Inference Network
+# QX Chain - Trust and Compliance Backbone for Civic AI
 
-QX Chain is a Polkadot SDK-based blockchain that implements **Optimistic Machine Learning (opML)** for decentralized AI inference validation. It provides a trustless environment where customers submit AI inference requests to workers, and validators can challenge incorrect computations through a stake-based consensus mechanism.
+QX Chain is a Substrate-based blockchain designed as the trust and compliance backbone for civic AI applications. It provides enterprise-grade blockchain infrastructure for cities, specializing in verifiable AI execution, identity management, and policy compliance.
+
+QX introduces an **optimistic worker-validator verification protocol** that operates at the application layer, separate from blockchain consensus. AIWorkers perform AI inference off-chain and immediately submit cryptographic commitments on-chain. AIValidators have a 7-day challenge window to audit and dispute incorrect submissions. If over 51% of validators reject a submission, the worker's stake is slashed and the result marked invalid.
+
+**Key Distinction**: AIWorkers and AIValidators are **application-layer entities**, The blockchain consensus is handled by standard Substrate NPoS nodes.
 
 ## 🔑 Key Features
 
-- **Request-Based AI Inference**: Customers submit requests to specific workers who process AI inference
-- **Worker Queue Management**: Workers maintain queues of pending requests with configurable limits
-- **Optimistic Validation**: Inferences are assumed correct unless challenged by validators
-- **Stake-based Security**: Workers stake 1,000+ tokens, validators stake 100+ tokens, with slashing for malicious behavior
-- **Multiple AI Models**: Support for various AI models through Ollama integration
-- **Real-time Status Tracking**: Monitor worker availability, request status, and inference results
-- **Interactive Customer Interface**: User-friendly interface for browsing workers and submitting requests
-- **Auto-Configuration**: Validators auto-register, nodes auto-connect, no complex setup needed
-- **Interactive Mode**: All nodes run in interactive mode for full control and monitoring
+- **Optimistic AI Verification**: AIWorkers submit results immediately with cryptographic commitments. Results are considered valid unless challenged within a 7-day dispute window.
+- **Economic Security Model**: Challenge-based validation with stake slashing ensures honest participation. AIWorkers stake collateral; if 51%+ of AIValidators successfully challenge a result, the worker loses stake.
+- **Off-Chain Computation, On-Chain Trust**: Heavy AI inference executes off-chain (e.g., domain-specific LLMs for civic services), while only cryptographic proofs, hashes, and attestations are stored on-chain.
+- **Blockchain-Routed Queries**: Citizens query AIWorkers through the blockchain, which routes requests to registered workers and returns verified AI responses.
+- **Application Layer Architecture**: AIWorkers and AIValidators are NOT consensus nodes—they're application-layer entities. Blockchain consensus uses standard Substrate NPoS.
+- **7-Day Challenge Period**: Validators have 100,800 blocks (~7 days) to audit and challenge worker submissions before automatic finalization.
+- **Stake-Weighted Consensus**: 51% of total validator stake weight must agree to slash a worker, ensuring fair dispute resolution.
+- **Multiple AI Models**: Support for various AI models through Ollama integration for civic AI services.
 
 ## 🏗️ Architecture
 
-The QX Chain consists of several key components:
+QX Chain has a three-layer architecture that separates blockchain consensus from AI verification:
 
-- **QX Chain Node**: Polkadot SDK-based blockchain node with custom opML pallet
-- **AI Workers**: Python services that process inference requests and submit results to blockchain
-- **Customers**: Users who submit inference requests through interactive interface
-- **Validators**: Network participants who validate inference correctness
-- **opML Pallet**: Custom Substrate pallet implementing optimistic ML consensus with request queuing
+### Consensus Layer
+- **Substrate NPoS Nodes**: Secure the blockchain using Nominated Proof-of-Stake (NPoS)
+- Handle block production (BABE), finality (GRANDPA), and network state
+- Standard Substrate consensus nodes (NOT AIWorkers/AIValidators)
+
+### Application Layer
+- **AIWorkers**: Civic entities (e.g., zoo department, parks office) that run off-chain AI inference using domain-specific models. They register services on-chain with metadata (service type, model hash, stake collateral) and submit cryptographic commitments immediately after inference.
+- **AIValidators**: Independent entities that audit worker submissions during 7-day challenge windows. They reproduce inference using committed model hash and input, then compare outputs. If discrepancy found, they submit challenges.
+
+### Interaction Layer
+- **Citizens/Customers**: Query AIWorkers through the blockchain for verified AI responses
+- **QX AI Pallet**: Custom Substrate pallet implementing optimistic AI verification with challenge-based validation
 
 ## 📋 Prerequisites
 
 - **Rust** (stable toolchain)
 - **Python 3.8+**
-- **Ollama** (for AI model serving)
 - **Git**
-
-## 🚀 Quick Start
-
-Choose between **Docker** (recommended for quick testing) or **Native** setup:
-
-### Option A: Docker Setup (Recommended)
-
-**🎯 Ultra-Simple Setup - Just 3 Commands!**
-
-**1. Start Ollama Service:**
-```bash
-# Start official Ollama container
-docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
-
-# Pull AI model
-docker exec -it ollama ollama pull gemma3:1b
-```
-
-**2. Build QX Chain Images:**
-```bash
-# Build the unified node image (Apple Silicon / arm64)
-DOCKER_BUILDKIT=1 docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
-
-# Build the client image
-docker build -f Dockerfile.client -t qxchain-client .
-```
-
-**3. Start Services (Simplified Setup):**
-
-**Terminal 1 - Worker Node (starts blockchain automatically):**
-```bash
-docker run -it --rm -p 9933:9933 --name worker \
-  qxchain-node /home/qxuser/start_node.sh --type worker --seed //Bob
-```
-
-**Terminal 2 - Validator Node (connects to existing blockchain):**
-```bash
-docker run -it --rm --name validator \
-  qxchain-node /home/qxuser/start_node.sh --type validator --seed //Charlie
-```
-
-**Terminal 3 - Client Interface:**
-```bash
-# Build client image
-docker build -f Dockerfile.client -t qxchain-client .
-
-# Run interactive client
-docker run -it --rm --name client qxchain-client
-```
-
-**🎉 That's it! Your QX Chain network is running!**
-
-**What happens automatically:**
-- ✅ First node starts blockchain on port 9933
-- ✅ Subsequent nodes connect to existing blockchain  
-- ✅ Validators auto-register with stake and node identity
-- ✅ Validators run in continuous auto-mode (monitoring every 10s)
-- ✅ Workers run in continuous auto-mode (queue listener every 5s)
-- ✅ Status updates shown every 30 seconds for both
-- ✅ No complex configuration needed
-
-**4. Check Status:**
-```bash
-# Check running containers
-docker ps
-
-# View logs
-docker logs worker
-docker logs validator
-```
-
-**5. Stop Services:**
-```bash
-# Stop all containers
-docker stop worker validator client ollama 2>/dev/null || true
-docker rm worker validator client ollama 2>/dev/null || true
-```
-
-### Docker Dev Caching (Faster Rebuilds)
-
-Use BuildKit cache mounts (already enabled in Dockerfile) and persistent volumes for scripts:
-
-```bash
-# Ensure BuildKit is on
-export DOCKER_BUILDKIT=1
-
-# Build (arm64), caches persist across builds
-docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
-
-# Optional: mount scripts live for development
-docker run -it \
-  -v $(pwd)/scripts:/home/qxuser/scripts \
-  -p 9944:9944 -p 9933:9933 \
-  --name worker-dev qxchain-node --type worker --seed //Bob
-```
-
-### Option B: Native Setup
-
-**1. Complete Setup (One-time):**
-```bash
-cd scripts
-./setup_qx_chain.sh
-```
-
-**2. Start Services (In Separate Terminals):**
-
-**Terminal 1 - Start QX Chain:**
-```bash
-cd scripts
-./start_chain.sh
-```
-
-**Terminal 2 - Start AI Worker:**
-```bash
-cd scripts
-./start_worker.sh
-```
-
-**Terminal 3 - Start Validator:**
-```bash
-cd scripts
-./start_validator.sh
-```
-
-**Terminal 4 - Start Customer Interface:**
-```bash
-cd scripts
-./start_customer.sh
-```
 
 ## 🔧 How to Run
 
@@ -167,133 +47,49 @@ cd scripts
 To start the QX Chain node:
 
 ```bash
-# Navigate to scripts directory
-cd scripts
+# Navigate to qxchain scripts directory
+cd qxchain/scripts
+
+# Build the chain (if not already built)
+./build_chain.sh
 
 # Start the blockchain node
-./start_chain.sh
+./start_node.sh
 ```
 
 This will:
 - Start the QX Chain node on `ws://localhost:9944`
 - Enable instant-seal consensus (blocks created only when transactions occur)
 - Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
-- Show logs in terminal and save to `logs/chain.log`
+- Show logs in terminal
 
-### Running AI Workers
+### Interacting with the Chain
 
-To start an AI worker that processes inference requests:
+To interact with the blockchain (run workers, submit requests, validate results), use the **QX Chain Connect** CLI tool:
 
-```bash
-# In a separate terminal
-cd scripts
-
-# Start the worker service
-./start_worker.sh
-```
-
-The worker will:
-- Connect to Ollama for AI model inference
-- Listen for requests on `http://localhost:8000` (or dynamic port)
-- Submit inference results to the QX Chain
-- Log activities to `logs/worker.log`
-
-### Running Validators
-
-To start a validator that monitors and validates inferences:
-
-```bash
-# In a separate terminal  
-cd scripts
-
-# Start the validator service
-./start_validator.sh
-```
-
-### Running Customer Interface
-
-To start the interactive customer interface for submitting inference requests:
-
-```bash
-# In a separate terminal
-cd scripts
-
-# Start the customer interface
-./start_customer.sh
-```
-
-The customer interface provides:
-- Browse available workers and their status
-- Submit inference requests to specific workers
-- Monitor request status and retrieve results
-- Interactive menu for easy navigation
-
-## 🧪 How to Test
-
-### Testing AI Inference Pipeline
-
-**Option 1: Interactive Customer Interface (Recommended)**
-
-```bash
-cd scripts
-./start_customer.sh
-```
-
-This provides a user-friendly interface to:
-1. Browse available workers
-2. Submit inference requests
-3. Monitor request status
-4. View results
-
-### Manual API Testing
-
-Test the worker API directly:
-
-```bash
-# Test inference endpoint
-curl -X POST http://localhost:8000/inference \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Hello, how are you?", "model_id": 0}'
-
-# Check worker status
-curl http://localhost:8000/status
-```
+https://github.com/qx-ventures/qxchain_connect
 
 ## 🌐 Service Endpoints
 
-### Docker Services
-- **Blockchain WebSocket**: `ws://localhost:9933` (shared by all nodes)
-- **Blockchain HTTP**: `http://localhost:9933` (shared by all nodes)
-- **Ollama API**: `http://localhost:11434`
-- **Customer Interface**: Interactive terminal interface via Docker container
-
-### Native Services
-- **QX Chain RPC**: `ws://localhost:9944`
+- **QX Chain WebSocket**: `ws://localhost:9944`
 - **QX Chain HTTP**: `http://localhost:9944`
-- **Ollama API**: `http://localhost:11434`
-- **Customer Interface**: Interactive terminal interface via `start_customer.sh`
 
 ## 📁 Project Structure
 
 ```
 qxchain/
 ├── node/                    # Blockchain node implementation
-├── runtime/                 # Runtime logic and configuration  
+├── runtime/                 # Runtime logic and configuration
 ├── pallets/
 │   └── pallet-qx-ai/       # Custom opML pallet
-├── scripts/                # Setup and service scripts
-│   ├── setup_qx_chain.sh   # Complete setup
-│   ├── start_chain.sh      # Start blockchain
-│   ├── start_worker.sh     # Start AI worker
-│   ├── start_validator.sh  # Start validator
-│   ├── start_customer.sh   # Start customer interface
-│   ├── customer.py         # Customer interface implementation
-│   ├── ollama_worker.py    # Worker implementation
-│   └── validator.py        # Validator implementation
+├── scripts/                # Blockchain management scripts
+│   ├── build_chain.sh      # Build blockchain binary
+│   ├── start_node.sh       # Start blockchain node
+│   └── kill_all.sh         # Kill all services
 └── logs/                   # Service logs
 ```
 
-## 🎯 opML Workflow
+## 🎯 Workflow
 
 1. **Worker Registration**: AI workers stake tokens and register on-chain with status tracking
 2. **Request Submission**: Customers submit inference requests to specific workers
@@ -304,12 +100,13 @@ qxchain/
 7. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
 
 ## 🔄 Request Lifecycle
-
 1. **Queued**: Request submitted to worker's queue
 2. **Assigned**: Request assigned to worker for processing
-3. **Processing**: Worker executing AI inference
-4. **Completed**: Result submitted to blockchain
-5. **Validated**: Result validated by network consensus
+3. **Completed**: Result submitted to blockchain with 7-day challenge period
+4. **Pending**: Awaiting potential validator challenges during dispute window
+5. **Challenged**: Under dispute by validators (if challenged)
+6. **Finalized**: Challenge period passed, result accepted as valid
+7. **Slashed**: Challenge succeeded, worker penalized and banned
 
 ## 🛠️ Development
 
@@ -330,20 +127,9 @@ cd pallets/pallet-qx-ai && cargo build --release
 ```bash
 # Run Rust tests
 cargo test
-
-# Run Python tests
-cd scripts
-python -m pytest test_*.py
 ```
 
 ## 🔍 Monitoring
-
-### Logs
-
-All services save logs to the `logs/` directory:
-- `chain.log` - Blockchain node logs
-- `worker.log` - AI worker logs  
-- `validator_*.log` - Validator logs
 
 ### Chain Status
 
@@ -356,32 +142,17 @@ curl -X POST http://localhost:9944 \
 
 ## 🛑 Stopping Services
 
-### Docker Services
-```bash
-# Stop and remove containers
-docker stop ollama worker validator client
-docker rm ollama worker validator client
-
-# Remove images (optional)
-docker rmi ollama/ollama qxchain-node qxchain-client
-
-# Clean up volumes (WARNING: deletes all data)
-docker volume rm ollama
-```
-
-### Native Services
-To stop all native services:
-- Press `Ctrl+C` in each terminal running the services
-- Or use the cleanup script: `./scripts/cleanup.sh` (if available)
+To stop the blockchain node:
+- Press `Ctrl+C` in the terminal running the node
+- Or use: `./scripts/kill_all.sh` to stop all services
 
 ## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **Build Issues**: Run `./scripts/check_dependencies.sh`
-2. **Ollama Issues**: Re-run `./scripts/setup_ollama.sh`
-3. **Port Conflicts**: Stop services with `Ctrl+C` and restart
-4. **Missing Dependencies**: Ensure Rust, Python, and Ollama are properly installed
+1. **Build Issues**: Ensure Rust toolchain is installed correctly
+2. **Port Conflicts**: Stop services with `Ctrl+C` and restart
+3. **Missing Dependencies**: Ensure Rust is properly installed
 
 ### Worker Registration Fails with "InsufficientBalance"
 
@@ -402,42 +173,10 @@ To stop all native services:
 
 **Quick Fix**: The scripts now use the correct minimum stake amounts (1,000 for workers, 100 for validators)
 
-## 🎉 Quick Summary
-
-**🚀 Get Started in 3 Commands:**
-```bash
-# 1. Start Ollama
-docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
-docker exec -it ollama ollama pull gemma3:1b
-
-# 2. Build Images  
-DOCKER_BUILDKIT=1 docker build --platform linux/arm64 -f Dockerfile.node -t qxchain-node .
-docker build -f Dockerfile.client -t qxchain-client .
-
-# 3. Run Network
-docker run -it --rm -p 9933:9933 --name worker qxchain-node /home/qxuser/start_node.sh --type worker --seed //Bob
-docker run -it --rm --name validator qxchain-node /home/qxuser/start_node.sh --type validator --seed //Charlie  
-docker run -it --rm --name client qxchain-client
-```
-
-**✨ What You Get:**
-- **Auto-Configuration**: Validators register automatically, nodes connect automatically
-- **Auto-Mode**: Both workers and validators run continuously in auto-mode
-- **Single Port**: Everything uses `ws://localhost:9933`
-- **Status Updates**: Periodic status reports every 30 seconds
-- **Zero Setup**: No complex configuration needed
 
 ## 📝 License
 
 This project is licensed under MIT-0 License. See [LICENSE](LICENSE) for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
 
 ## 📚 Learn More
 

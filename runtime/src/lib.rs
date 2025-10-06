@@ -15,7 +15,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A minimal runtime that includes the QX AI pallet for decentralized AI inference validation.
+//! QX Chain Runtime - Substrate-based blockchain for civic AI applications
+//!
+//! This runtime implements the trust and compliance backbone for verifiable AI execution.
+//! It includes the QX AI pallet for optimistic AI verification with challenge-based validation.
+//!
+//! Architecture:
+//! - Consensus Layer: NPoS with BABE + GRANDPA (handled by default Substrate consensus nodes)
+//! - Application Layer: AIWorkers and AIValidators (NOT consensus nodes, but app-layer entities)
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -165,7 +172,8 @@ mod runtime {
 	#[runtime::pallet_index(4)]
 	pub type TransactionPayment = pallet_transaction_payment::Pallet<Runtime>;
 
-	/// QX opML pallet for machine learning operations
+	/// QX AI pallet for optimistic AI inference verification
+	/// AIWorkers and AIValidators are application-layer entities, NOT blockchain consensus nodes
 	#[runtime::pallet_index(5)]
 	pub type QxAi = pallet_qx_ai::Pallet<Runtime>;
 }
@@ -207,15 +215,19 @@ impl pallet_transaction_payment::Config for Runtime {
 	type LengthToFee = FixedFee<1, <Self as pallet_balances::Config>::Balance>;
 }
 
-// Implements the types required for the custom opML pallet.
+// Implements the types required for the QX AI pallet.
+// Configuration aligns with QX Chain V3 specification:
+// - 7-day challenge period for optimistic verification
+// - 51% consensus threshold for slashing
+// - Stake-weighted validator consensus
 impl pallet_qx_ai::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
-	type MinWorkerStake = ConstU64<900>; // 900 units
-	type MinChallengeStake = ConstU64<100>; // 100 units
-	type ChallengePeriod = ConstU32<100>; // 100 blocks
-	type SlashThreshold = ConstU32<51>; // 51% majority
-	type MaxQueueSize = ConstU32<100>; // Maximum 100 requests per worker queue
+	type MinAIWorkerStake = ConstU64<900>; // 900 units minimum stake for AIWorkers
+	type MinChallengeStake = ConstU64<100>; // 100 units minimum stake for AIValidators
+	type ChallengePeriod = ConstU32<100800>; // 7 days @ 6 sec/block = 100,800 blocks
+	type SlashThreshold = ConstU32<51>; // 51% majority consensus for slashing
+	type MaxQueueSize = ConstU32<100>; // Maximum 100 requests per AIWorker queue
 }
 
 type Block = frame::runtime::types_common::BlockOf<Runtime, TxExtension>;
