@@ -50,6 +50,7 @@ impl SubstrateCli for Cli {
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
 		Ok(match id {
 			"dev" => Box::new(chain_spec::development_chain_spec()?),
+			"local" => Box::new(chain_spec::local_testnet_chain_spec()?),
 			path =>
 				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 		})
@@ -111,7 +112,7 @@ pub fn run() -> sc_cli::Result<()> {
 		Some(Subcommand::ChainInfo(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| {
-				cmd.run::<qxchain_runtime::interface::OpaqueBlock>(&config)
+				cmd.run::<qxchain_runtime::opaque::Block>(&config)
 			})
 		},
 		None => {
@@ -119,11 +120,11 @@ pub fn run() -> sc_cli::Result<()> {
 			runner.run_node_until_exit(|config| async move {
 				match config.network.network_backend.unwrap_or_default() {
 					sc_network::config::NetworkBackendType::Libp2p =>
-						service::new_full::<sc_network::NetworkWorker<_, _>>(config, cli.consensus)
+						service::new_full::<sc_network::NetworkWorker<_, _>>(config)
 							.map_err(sc_cli::Error::Service),
 					sc_network::config::NetworkBackendType::Litep2p => service::new_full::<
 						sc_network::Litep2pNetworkBackend,
-					>(config, cli.consensus)
+					>(config)
 					.map_err(sc_cli::Error::Service),
 				}
 			})

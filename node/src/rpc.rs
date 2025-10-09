@@ -22,14 +22,16 @@
 
 #![warn(missing_docs)]
 
-use jsonrpsee::RpcModule;
-use qxchain_runtime::interface::{AccountId, Nonce, OpaqueBlock};
-use polkadot_sdk::{
-	sc_transaction_pool_api::TransactionPool,
-	sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata},
-	*,
-};
 use std::sync::Arc;
+
+use jsonrpsee::RpcModule;
+use qxchain_runtime::{opaque::Block, AccountId, Balance, Nonce};
+use polkadot_sdk::{
+	sp_api::ProvideRuntimeApi,
+	sp_block_builder::BlockBuilder,
+	sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata},
+	sc_transaction_pool_api::TransactionPool,
+};
 
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
@@ -45,22 +47,22 @@ pub fn create_full<C, P>(
 	deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-	C: Send
-		+ Sync
-		+ 'static
-		+ sp_api::ProvideRuntimeApi<OpaqueBlock>
-		+ HeaderBackend<OpaqueBlock>
-		+ HeaderMetadata<OpaqueBlock, Error = BlockChainError>
-		+ 'static,
-	C::Api: sp_block_builder::BlockBuilder<OpaqueBlock>,
-	C::Api: substrate_frame_rpc_system::AccountNonceApi<OpaqueBlock, AccountId, Nonce>,
+	C: ProvideRuntimeApi<Block>,
+	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
+	C: Send + Sync + 'static,
+	C::Api: polkadot_sdk::substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
+	C::Api: polkadot_sdk::pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
+	C::Api: BlockBuilder<Block>,
 	P: TransactionPool + 'static,
 {
+	use polkadot_sdk::pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use polkadot_sdk::substrate_frame_rpc_system::{System, SystemApiServer};
+
 	let mut module = RpcModule::new(());
 	let FullDeps { client, pool } = deps;
 
-	module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
+	module.merge(System::new(client.clone(), pool).into_rpc())?;
+	module.merge(TransactionPayment::new(client).into_rpc())?;
 
 	Ok(module)
 }

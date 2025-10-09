@@ -12,12 +12,43 @@ publish = false
 [dependencies]
 codec = { workspace = true }
 pallet-qx-ai = { path = "../pallets/pallet-qx-ai", default-features = false }
-polkadot-sdk = { workspace = true, features = ["pallet-balances", "pallet-sudo", "pallet-timestamp", "pallet-transaction-payment", "pallet-transaction-payment-rpc-runtime-api", "runtime"] }
+polkadot-sdk = { workspace = true, features = [
+	"frame-executive",
+	"frame-metadata-hash-extension",
+	"frame-support",
+	"frame-system",
+	"frame-system-benchmarking",
+	"frame-system-rpc-runtime-api",
+	"frame-try-runtime",
+	"frame-benchmarking",
+	"pallet-aura",
+	"pallet-balances",
+	"pallet-grandpa",
+	"pallet-sudo",
+	"pallet-timestamp",
+	"pallet-transaction-payment",
+	"pallet-transaction-payment-rpc-runtime-api",
+	"sp-api",
+	"sp-block-builder",
+	"sp-consensus-aura",
+	"sp-consensus-grandpa",
+	"sp-core",
+	"sp-genesis-builder",
+	"sp-inherents",
+	"sp-keyring",
+	"sp-offchain",
+	"sp-runtime",
+	"sp-session",
+	"sp-storage",
+	"sp-transaction-pool",
+	"sp-version",
+	"runtime"
+] }
 scale-info = { workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 
 [build-dependencies]
-polkadot-sdk = { optional = true, workspace = true, features = ["substrate-wasm-builder"] }
+substrate-wasm-builder = { version = "25.0.0", optional = true }
 
 [features]
 default = ["std"]
@@ -27,4 +58,5 @@ std = [
 	"polkadot-sdk/std",
 	"scale-info/std",
 	"serde_json/std",
+	"substrate-wasm-builder",
 ]

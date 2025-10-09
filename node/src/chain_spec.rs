@@ -40,3 +40,13 @@ pub fn development_chain_spec() -> Result<ChainSpec, String> {
 		.with_properties(props())
 		.build())
 }
+
+pub fn local_testnet_chain_spec() -> Result<ChainSpec, String> {
+	Ok(ChainSpec::builder(WASM_BINARY.expect("Local testnet wasm not available"), Default::default())
+		.with_name("QX Local Testnet")
+		.with_id("qx_local")
+		.with_chain_type(ChainType::Local)
+		.with_genesis_config_preset_name(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET)
+		.with_properties(props())
+		.build())
+}

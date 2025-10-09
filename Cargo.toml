@@ -6,7 +6,7 @@ repository = "https://github.com/qx-ventures/qxchain.git"
 edition = "2021"
 
 [workspace]
-default-members = ["runtime"]
+default-members = ["node", "runtime"]
 members = [
     "node",
     "pallets/pallet-qx-ai",
