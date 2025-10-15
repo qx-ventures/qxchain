@@ -19,7 +19,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Default configuration
 NUM_NODES=4
-CHAIN="local"
+CHAIN="dev"
 BASE_RPC_PORT=9944
 BASE_P2P_PORT=30333
 PURGE=false
@@ -32,7 +32,7 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --nodes NUM          Number of nodes to start (default: 4)"
-    echo "  --chain CHAIN        Chain specification: dev, local (default: local)"
+    echo "  --chain CHAIN        Chain specification: dev (default: dev)"
     echo "  --rpc-port PORT      Starting RPC port (default: 9944, increments for each node)"
     echo "  --p2p-port PORT      Starting P2P port (default: 30333, increments for each node)"
     echo "  --purge              Purge chain data before starting"
@@ -86,8 +86,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use dev chain when using test keys (Alice/Bob) to avoid network key issues
-if [ "$USE_ALICE_BOB" = true ] && [ "$CHAIN" = "local" ]; then
+# Dev chain is required when using test keys (Alice/Bob)
+if [ "$USE_ALICE_BOB" = true ] && [ "$CHAIN" != "dev" ]; then
+    echo -e "${YELLOW}⚠️  Test keys require dev chain, switching to dev...${NC}"
     CHAIN="dev"
 fi
 

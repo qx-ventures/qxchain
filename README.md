@@ -12,7 +12,7 @@ QX introduces an **optimistic worker-validator verification protocol** that oper
 - **Economic Security Model**: Challenge-based validation with stake slashing ensures honest participation. AIWorkers stake collateral; if 51%+ of AIValidators successfully challenge a result, the worker loses stake.
 - **Off-Chain Computation, On-Chain Trust**: Heavy AI inference executes off-chain (e.g., domain-specific LLMs for civic services), while only cryptographic proofs, hashes, and attestations are stored on-chain.
 - **Blockchain-Routed Queries**: Citizens query AIWorkers through the blockchain, which routes requests to registered workers and returns verified AI responses.
-- **Application Layer Architecture**: AIWorkers and AIValidators are NOT consensus nodes—they're application-layer entities. Blockchain consensus uses standard Substrate NPoS.
+- **Application Layer Architecture**: AIWorkers and AIValidators are NOT consensus nodes—they're application-layer entities. Blockchain consensus uses AURA + GRANDPA (Proof of Authority).
 - **7-Day Challenge Period**: Validators have 100,800 blocks (~7 days) to audit and challenge worker submissions before automatic finalization.
 - **Stake-Weighted Consensus**: 51% of total validator stake weight must agree to slash a worker, ensuring fair dispute resolution.
 - **Multiple AI Models**: Support for various AI models through Ollama integration for civic AI services.
@@ -22,8 +22,8 @@ QX introduces an **optimistic worker-validator verification protocol** that oper
 QX Chain has a three-layer architecture that separates blockchain consensus from AI verification:
 
 ### Consensus Layer
-- **Substrate NPoS Nodes**: Secure the blockchain using Nominated Proof-of-Stake (NPoS)
-- Handle block production (BABE), finality (GRANDPA), and network state
+- **AURA + GRANDPA Consensus (Proof of Authority)**: Authority nodes secure the blockchain using AURA for block production and GRANDPA for finality
+- Designed for permissioned networks with pre-selected authority validators
 - Standard Substrate consensus nodes (NOT AIWorkers/AIValidators)
 
 ### Application Layer
@@ -77,9 +77,36 @@ cd qxchain/scripts
 
 Both methods will:
 - Start the QX Chain node on `ws://localhost:9944`
-- Enable instant-seal consensus (blocks created only when transactions occur)
+- Enable AURA + GRANDPA consensus for Proof of Authority
 - Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
 - Show logs in terminal
+
+### Running Multiple Authority Nodes
+
+To run a multi-node network with 3 authority validators:
+
+```bash
+# Navigate to scripts directory
+cd qxchain/scripts
+
+# Start 3 authority nodes with Alice, Bob, and Charlie as validators
+./start_network.sh --nodes 3 --use-alice-bob --purge
+
+# View logs for each node
+tail -f logs/node1.log
+tail -f logs/node2.log
+tail -f logs/node3.log
+
+# Stop all nodes
+./kill_all.sh
+```
+
+The network launcher script supports:
+- `--nodes NUM`: Number of authority nodes to start (default: 4)
+- `--use-alice-bob`: Use pre-configured test keys (Alice, Bob, Charlie, etc.)
+- `--purge`: Clean chain data before starting
+- `--rpc-port PORT`: Starting RPC port (default: 9944)
+- `--p2p-port PORT`: Starting P2P port (default: 30333)
 
 ### Interacting with the Chain
 

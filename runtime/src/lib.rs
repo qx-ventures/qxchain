@@ -291,8 +291,8 @@ impl pallet_sudo::Config for Runtime {
 impl pallet_qx_ai::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
-	type MinAIWorkerStake = ConstU128<{ 1_000 * EXISTENTIAL_DEPOSIT }>;
-	type MinChallengeStake = ConstU128<{ 100 * EXISTENTIAL_DEPOSIT }>;
+	type MinAIWorkerStake = ConstU128<1>;
+	type MinChallengeStake = ConstU128<1>;
 	type ChallengePeriod = ConstU32<{ 7 * DAYS }>;  // 7 days challenge period
 	type SlashThreshold = ConstU32<51>;  // 51% threshold for slashing
 	type MaxQueueSize = ConstU32<100>;  // Max 100 requests per worker
