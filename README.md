@@ -1,6 +1,6 @@
-# QX Chain - Trust and Compliance Backbone for Civic AI
+# QX Chain - Verifiable AI Inference
 
-QX Chain is a Substrate-based blockchain designed as the trust and compliance backbone for civic AI applications. It provides enterprise-grade blockchain infrastructure for cities, specializing in verifiable AI execution, identity management, and policy compliance.
+QX Chain is a Substrate-based blockchain designed as the infrastructure for verifiable AI execution. It provides blockchain infrastructure for cities, specializing in verifiable AI execution, identity management, and policy compliance.
 
 QX introduces an **optimistic worker-validator verification protocol** that operates at the application layer, separate from blockchain consensus. AIWorkers perform AI inference off-chain and immediately submit cryptographic commitments on-chain. AIValidators have a 7-day challenge window to audit and dispute incorrect submissions. If over 51% of validators reject a submission, the worker's stake is slashed and the result marked invalid.
 
@@ -12,7 +12,7 @@ QX introduces an **optimistic worker-validator verification protocol** that oper
 - **Economic Security Model**: Challenge-based validation with stake slashing ensures honest participation. AIWorkers stake collateral; if 51%+ of AIValidators successfully challenge a result, the worker loses stake.
 - **Off-Chain Computation, On-Chain Trust**: Heavy AI inference executes off-chain (e.g., domain-specific LLMs for civic services), while only cryptographic proofs, hashes, and attestations are stored on-chain.
 - **Blockchain-Routed Queries**: Citizens query AIWorkers through the blockchain, which routes requests to registered workers and returns verified AI responses.
-- **Application Layer Architecture**: AIWorkers and AIValidators are NOT consensus nodes—they're application-layer entities. Blockchain consensus uses standard Substrate NPoS.
+- **Application Layer Architecture**: AIWorkers and AIValidators are NOT consensus nodes—they're application-layer entities. Blockchain consensus uses AURA + GRANDPA (Proof of Authority).
 - **7-Day Challenge Period**: Validators have 100,800 blocks (~7 days) to audit and challenge worker submissions before automatic finalization.
 - **Stake-Weighted Consensus**: 51% of total validator stake weight must agree to slash a worker, ensuring fair dispute resolution.
 - **Multiple AI Models**: Support for various AI models through Ollama integration for civic AI services.
@@ -22,89 +22,27 @@ QX introduces an **optimistic worker-validator verification protocol** that oper
 QX Chain has a three-layer architecture that separates blockchain consensus from AI verification:
 
 ### Consensus Layer
-- **Substrate NPoS Nodes**: Secure the blockchain using Nominated Proof-of-Stake (NPoS)
-- Handle block production (BABE), finality (GRANDPA), and network state
+- **AURA + GRANDPA Consensus (Proof of Authority)**: Authority nodes secure the blockchain using AURA for block production and GRANDPA for finality
+- Designed for permissioned networks with pre-selected authority validators
 - Standard Substrate consensus nodes (NOT AIWorkers/AIValidators)
 
 ### Application Layer
 - **AIWorkers**: Civic entities (e.g., zoo department, parks office) that run off-chain AI inference using domain-specific models. They register services on-chain with metadata (service type, model hash, stake collateral) and submit cryptographic commitments immediately after inference.
 - **AIValidators**: Independent entities that audit worker submissions during 7-day challenge windows. They reproduce inference using committed model hash and input, then compare outputs. If discrepancy found, they submit challenges.
 
-### Interaction Layer
-- **Citizens/Customers**: Query AIWorkers through the blockchain for verified AI responses
-- **QX AI Pallet**: Custom Substrate pallet implementing optimistic AI verification with challenge-based validation
-
-## 📋 Prerequisites
-
-- **Rust** (stable toolchain)
-- **Python 3.8+**
-- **Git**
-
-## 🔧 How to Run
-
-### Option 1: Docker (Recommended)
-
-Quick start with Docker:
-
-```bash
-# Build the image
-docker compose build
-
-# Start the node
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop the node
-docker compose down
-```
-
-### Option 2: Native Build
-
-To start the QX Chain node natively:
-
-```bash
-# Navigate to qxchain scripts directory
-cd qxchain/scripts
-
-# Build the chain (if not already built)
-./build_chain.sh
-
-# Start the blockchain node
-./start_node.sh
-```
-
-Both methods will:
-- Start the QX Chain node on `ws://localhost:9944`
-- Enable instant-seal consensus (blocks created only when transactions occur)
-- Set up pre-funded test accounts (Alice, Bob, Charlie, Dave, Eve, Ferdie)
-- Show logs in terminal
-
-### Interacting with the Chain
-
-To interact with the blockchain (run workers, submit requests, validate results), use the **QX Chain Connect** CLI tool:
-
-https://github.com/qx-ventures/qxchain_connect
-
-## 🌐 Service Endpoints
-
-- **QX Chain WebSocket**: `ws://localhost:9944`
-- **QX Chain HTTP**: `http://localhost:9944`
 
 ## 📁 Project Structure
 
 ```
 qxchain/
-├── node/                    # Blockchain node implementation
-├── runtime/                 # Runtime logic and configuration
+├── node/                       # Blockchain node implementation
+├── runtime/                    # Runtime logic and configuration
 ├── pallets/
-│   └── pallet-qx-ai/       # Custom opML pallet
-├── scripts/                # Blockchain management scripts
-│   ├── build_chain.sh      # Build blockchain binary
-│   ├── start_node.sh       # Start blockchain node
-│   └── kill_all.sh         # Kill all services
-└── logs/                   # Service logs
+│   └── pallet-qx-ai/          # Custom opML pallet
+├── scripts/
+│   └── build_chain.sh         # Build blockchain binary
+├── zombienet.toml             # Multi-node test network (4 validators)
+├── zombienet-single.toml      # Single-node development config/.
 ```
 
 ## 🎯 Workflow
@@ -126,6 +64,42 @@ qxchain/
 6. **Finalized**: Challenge period passed, result accepted as valid
 7. **Slashed**: Challenge succeeded, worker penalized and banned
 
+## 🔧 How to Run
+
+**Install Zombienet:**
+```bash
+# macOS
+curl -L -o zombienet https://github.com/paritytech/zombienet/releases/latest/download/zombienet-macos
+chmod +x zombienet
+sudo xattr -d com.apple.quarantine zombienet
+sudo mv zombienet /usr/local/bin/
+
+# Linux
+curl -L -o zombienet https://github.com/paritytech/zombienet/releases/latest/download/zombienet-linux-x64
+chmod +x zombienet
+sudo mv zombienet /usr/local/bin/
+```
+
+**Build and run:**
+```bash
+cargo build --release
+
+# Single node (quick testing)
+zombienet spawn --provider native zombienet-single.toml
+
+# Multi-node network (4 validators)
+zombienet spawn --provider native zombienet.toml
+```
+
+Pre-funded test accounts: Alice, Bob, Charlie, Dave, Eve, Ferdie
+Network endpoint: `ws://localhost:9944`
+
+## 🔗 Interacting with the Chain
+
+To interact with the blockchain (run workers, submit requests, validate results), use the **QX Chain Connect** CLI tool:
+
+https://github.com/qx-ventures/qxchain_connect
+
 ## 🛠️ Development
 
 ### Building from Source
@@ -140,106 +114,19 @@ cd runtime && cargo build --release
 cd pallets/pallet-qx-ai && cargo build --release
 ```
 
-### Running Tests
-
-```bash
-# Run Rust tests
-cargo test
-```
-
-## 🐳 Docker Deployment
-
-### Quick Start with Docker
-
-```bash
-# Start with Docker Compose (recommended)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the node
-docker-compose down
-```
-
-### Building Multi-Architecture Images
-
-Build for different platforms using Docker Compose:
-
-```bash
-# Build for AMD64 (Intel/AMD processors)
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build
-
-# Build for ARM64 (Apple Silicon, Raspberry Pi)
-DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose build
-
-# Or set the platform in .env file
-cp .env.example .env
-# Edit .env to set DOCKER_DEFAULT_PLATFORM
-docker compose build
-
-# Run with specific platform
-DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose up
-
-# The default platform is linux/amd64 if not specified
-docker compose build  # builds for linux/amd64
-```
-
-### Docker Configuration
-
-The Docker setup includes:
-
-- **Multi-stage builds** for optimized image size
-- **Multi-architecture support** (AMD64, ARM64)
-- **BuildKit optimizations** for faster builds
-- **Security-hardened** distroless runtime
-- **Health checks** and monitoring
-- **Volume persistence** for chain data
-
-
-### Production Deployment
-
-For production, customize the Docker Compose configuration:
-
-```yaml
-services:
-  qxchain:
-    image: qxchain/node:latest
-    command: >
-      --chain=mainnet
-      --validator
-      --rpc-external=false
-      --rpc-cors=none
-    resources:
-      limits:
-        memory: 8G
-        cpus: '4'
-```
-
 ## 🔍 Monitoring
 
-### Chain Status
+### Polkadot UI
 
-Check chain status via RPC:
+Run the Polkadot.js Apps UI to interact with the chain:
 ```bash
-curl -X POST http://localhost:9944 \
-  -H "Content-Type: application/json" \
-  -d '{"id":1,"jsonrpc":"2.0","method":"system_health","params":[]}'
+docker run --name polkadot-ui -e WS_URL=ws://localhost:9944 -p 80:80 jacogr/polkadot-js-apps:latest
 ```
 
-## 🛑 Stopping Services
+Access the UI at http://localhost
 
-To stop the blockchain node:
-- Press `Ctrl+C` in the terminal running the node
-- Or use: `./scripts/kill_all.sh` to stop all services
 
 ## 🔧 Troubleshooting
-
-### Common Issues
-
-1. **Build Issues**: Ensure Rust toolchain is installed correctly
-2. **Port Conflicts**: Stop services with `Ctrl+C` and restart
-3. **Missing Dependencies**: Ensure Rust is properly installed
 
 ### Worker Registration Fails with "InsufficientBalance"
 
@@ -249,12 +136,12 @@ To stop the blockchain node:
 
 **Solution**: Each test account has exactly 1,000 tokens, which is the minimum required:
 - Workers need minimum 1,000 tokens to stake
-- Validators need minimum 100 tokens to stake  
+- Validators need minimum 100 tokens to stake
 - Transaction fees are minimal (1 token per transaction)
 
 **Pre-funded Test Accounts** (all have 1,000 tokens):
 - `//Alice` - Root/Sudo account
-- `//Bob` - Default worker account  
+- `//Bob` - Default worker account
 - `//Charlie` - Default validator account
 - `//Dave`, `//Eve`, `//Ferdie` - Additional test accounts
 

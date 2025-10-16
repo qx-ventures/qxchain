@@ -61,9 +61,3 @@ else
     echo -e "${RED}❌ Build failed${NC}"
     exit 1
 fi
-
-echo ""
-echo -e "${BLUE}📖 Next steps:${NC}"
-echo -e "  1. Start the blockchain: ${GREEN}./start_node.sh${NC}"
-echo -e "  2. Use qxchain_connect to interact with the chain"
-echo ""

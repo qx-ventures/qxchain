@@ -1,0 +1,17 @@
+# QX Chain Single-Node Development Network
+# Quick single-node setup for rapid development and testing
+
+[settings]
+timeout = 1000
+
+[relaychain]
+chain = "dev"
+default_command = "./target/release/qxchain"
+
+# Single validator node (Alice)
+[[relaychain.nodes]]
+name = "alice"
+validator = true
+ws_port = 9944
+rpc_port = 9944
+port = 30333
