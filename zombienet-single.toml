@@ -5,7 +5,7 @@
 timeout = 1000
 
 [relaychain]
-chain = "dev"
+chain = "dev_chain_spec_raw.json"
 default_command = "./target/release/qxchain"
 
 # Single validator node (Alice)

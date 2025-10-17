@@ -4,12 +4,13 @@
 
 [settings]
 timeout = 1000
-provider = "kubernetes"
+provider = "native"
+enable_tracing = false
+node_spawn_timeout = 300
 
 [relaychain]
-chain = "dev"
+chain = "local_testnet_chain_spec_raw.json"
 default_command = "./target/release/qxchain"
-chain_spec_command = "./target/release/qxchain build-spec --chain dev"
 
 # Node 1: Alice (Primary validator)
 [[relaychain.nodes]]

@@ -1,7 +1,7 @@
 {
-  "name": "Development",
-  "id": "dev",
-  "chainType": "Development",
+  "name": "Local Testnet",
+  "id": "local_testnet",
+  "chainType": "Local",
   "bootNodes": [],
   "telemetryEndpoints": null,
   "protocolId": null,
@@ -16,7 +16,10 @@
       "patch": {
         "aura": {
           "authorities": [
-            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+            "5DAAnrj7VHTznn2AWBemMuyBwZWs6FNFjdyVXUeYum3PTXFy"
           ]
         },
         "balances": {
@@ -83,6 +86,18 @@
           "authorities": [
             [
               "5FA9nQDVg267DEd8m1ZypXLBnvN7SFxYwV7ndqSYGiN9TTpu",
+              1
+            ],
+            [
+              "5GoNkf6WdbxCFnPdAnYYQyCjAKPJgLNxXwPjwTh6DGg6gN3E",
+              1
+            ],
+            [
+              "5DbKjhNLpqX3zqZdNBc9BGb4fHU1cRBaDhJUskrvkwfraDi6",
+              1
+            ],
+            [
+              "5ECTwv6cZ5nJQPk6tWfaTrEk8YH2L7X1VT4EL5Tx2ikfFwb7",
               1
             ]
           ]

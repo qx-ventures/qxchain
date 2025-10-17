@@ -82,7 +82,11 @@ sudo mv zombienet /usr/local/bin/
 
 **Build and run:**
 ```bash
+# Build the blockchain binary
 cargo build --release
+
+# Generate chain specification files (required before first run)
+./scripts/build_chain_specs.sh
 
 # Single node (quick testing)
 zombienet spawn --provider native zombienet-single.toml

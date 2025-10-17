@@ -623,6 +623,46 @@ pub mod genesis_config_presets {
 					},
 				})
 			}
+			polkadot_sdk::sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => {
+				let endowment = Balance::MAX / 1000;
+				// Create initial authorities with both Aura (Sr25519) and Grandpa (Ed25519) keys
+				// Use 4 validators for local testnet: Alice, Bob, Charlie, Dave
+				let initial_authorities: Vec<(AuraId, GrandpaId)> = vec![
+					(
+						Sr25519Keyring::Alice.public().into(),
+						Ed25519Keyring::Alice.public().into(),
+					),
+					(
+						Sr25519Keyring::Bob.public().into(),
+						Ed25519Keyring::Bob.public().into(),
+					),
+					(
+						Sr25519Keyring::Charlie.public().into(),
+						Ed25519Keyring::Charlie.public().into(),
+					),
+					(
+						Sr25519Keyring::Dave.public().into(),
+						Ed25519Keyring::Dave.public().into(),
+					),
+				];
+
+				serde_json::json!({
+					"balances": {
+						"balances": Sr25519Keyring::iter()
+							.map(|a| (a.to_account_id(), endowment))
+							.collect::<Vec<_>>(),
+					},
+					"sudo": {
+						"key": Sr25519Keyring::Alice.to_account_id()
+					},
+					"aura": {
+						"authorities": initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
+					},
+					"grandpa": {
+						"authorities": initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>(),
+					},
+				})
+			}
 			_ => return None,
 		};
 
@@ -635,7 +675,10 @@ pub mod genesis_config_presets {
 
 	/// Get the list of available preset names
 	pub fn preset_names() -> Vec<polkadot_sdk::sp_genesis_builder::PresetId> {
-		vec![polkadot_sdk::sp_genesis_builder::DEV_RUNTIME_PRESET.into()]
+		vec![
+			polkadot_sdk::sp_genesis_builder::DEV_RUNTIME_PRESET.into(),
+			polkadot_sdk::sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET.into(),
+		]
 	}
 }
 
