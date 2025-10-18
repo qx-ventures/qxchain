@@ -28,9 +28,12 @@ futures = { features = ["thread-pool"], workspace = true }
 futures-timer = { workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
 qxchain-runtime.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { workspace = true }
 polkadot-sdk = { workspace = true, features = [
 	"experimental",
 	"node",
+	"sc-chain-spec",
 	"sc-consensus-aura",
 	"sc-consensus-grandpa",
 	"sp-consensus-aura",

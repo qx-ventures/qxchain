@@ -1,0 +1,110 @@
+version: "3.8"
+
+volumes:
+  mainnet-lite-volume:
+  mainnet-archive-volume:
+  testnet-lite-volume:
+  testnet-archive-volume:
+  dev-volume:
+
+services:
+  common: &common
+    image: qxchain:latest
+## Uncomment to build from scratch:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#      target: qxchain
+    cpu_count: 4
+    mem_limit: 40000000000
+    memswap_limit: 80000000000
+    ports:
+      - "9944:9944"
+      - "30333:30333"
+      - "9933:9933"
+    expose:
+      - "9944"
+      - "30333"
+      - "9933"
+    environment:
+      - CARGO_HOME=/var/www/qxchain/.cargo
+
+  # Development node with dev chainspec
+  dev:
+    <<: *common
+    container_name: qxchain-dev
+    volumes:
+      - dev-volume:/data
+    command:
+      - --base-path=/data
+      - --chain=dev_chain_spec_raw.json
+      - --rpc-external
+      - --rpc-cors=all
+      - --no-mdns
+      - --dev
+
+  # Mainnet lite node (adjust chainspec and bootnodes for your network)
+  mainnet-lite:
+    <<: *common
+    container_name: qxchain-mainnet-lite
+    volumes:
+      - mainnet-lite-volume:/data
+    command:
+      - --base-path=/data
+      - --chain=mainnet_chain_spec.json
+      - --rpc-external
+      - --rpc-cors=all
+      - --no-mdns
+      # - --bootnodes=/dns/bootnode.qxchain.io/tcp/30333/ws/p2p/<PEER_ID>
+      - --sync=warp
+      - --database paritydb
+      - --db-cache 4096
+      - --trie-cache-size 2048
+
+  # Mainnet archive node
+  mainnet-archive:
+    <<: *common
+    container_name: qxchain-mainnet-archive
+    volumes:
+      - mainnet-archive-volume:/data
+    command:
+      - --base-path=/data
+      - --chain=mainnet_chain_spec.json
+      - --rpc-external
+      - --rpc-cors=all
+      - --no-mdns
+      # - --bootnodes=/dns/bootnode.qxchain.io/tcp/30333/ws/p2p/<PEER_ID>
+      - --pruning=archive
+
+  # Testnet lite node
+  testnet-lite:
+    <<: *common
+    container_name: qxchain-testnet-lite
+    volumes:
+      - testnet-lite-volume:/data
+    command:
+      - --base-path=/data
+      - --chain=local_testnet_chain_spec_raw.json
+      - --rpc-external
+      - --rpc-cors=all
+      - --no-mdns
+      # - --bootnodes=/dns/bootnode.testnet.qxchain.io/tcp/30333/p2p/<PEER_ID>
+      - --sync=warp
+      - --database paritydb
+      - --db-cache 4096
+      - --trie-cache-size 2048
+
+  # Testnet archive node
+  testnet-archive:
+    <<: *common
+    container_name: qxchain-testnet-archive
+    volumes:
+      - testnet-archive-volume:/data
+    command:
+      - --base-path=/data
+      - --chain=local_testnet_chain_spec_raw.json
+      - --rpc-external
+      - --rpc-cors=all
+      - --no-mdns
+      # - --bootnodes=/dns/bootnode.testnet.qxchain.io/tcp/30333/p2p/<PEER_ID>
+      - --pruning=archive

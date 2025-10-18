@@ -6,3 +6,6 @@ data
 
 # Chain specs - ignore raw versions (generated from plain specs)
 *_raw.json
+
+# Validator keys - NEVER commit these!
+scripts/node_keys/

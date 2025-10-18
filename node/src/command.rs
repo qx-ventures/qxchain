@@ -49,8 +49,9 @@ impl SubstrateCli for Cli {
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
 		Ok(match id {
-			"dev" => Box::new(chain_spec::development_chain_spec()?),
-			"local" | "local_testnet" => Box::new(chain_spec::local_testnet_chain_spec()?),
+			"localnet_single" => Box::new(chain_spec::localnet::localnet_config(true)?),
+			"localnet" => Box::new(chain_spec::localnet::localnet_config(false)?),
+			"mainnet" => Box::new(chain_spec::mainnet::mainnet_config()?),
 			path =>
 				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 		})
