@@ -19,16 +19,16 @@
       "patch": {
         "aura": {
           "authorities": [
-            "5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva",
-            "5D2Wg5PJgksxeARcGcGPR55nshKDZ7xZNpG1g1nY3bkFGgYT",
-            "5DyMwhkTjr3W8edx1miE7rTVj3Sg2zwQajemyRnkh6HsSc3J",
-            "5ELgkJdjkkLQzi8k5giKpEWZhreMJMXBmeKa19B5Fy1gzi44"
+            "5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog",
+            "5H6Tf2hamehd3ioXa33zyYWxZriFFdytkUN8kNUu5qjbLYa8",
+            "5EsSP19v8UXzuAdncoKNuuRmiGdyjDdRBBqecgS77jA54W9Z",
+            "5CFFugsxfkHK1PQgsd4r7Ge6vtXX6oEdko9nhTUmCKvKti9k"
           ]
         },
         "balances": {
           "balances": [
             [
-              "5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva",
+              "5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog",
               1000000000000000
             ]
           ]
@@ -36,25 +36,25 @@
         "grandpa": {
           "authorities": [
             [
-              "5HHuZ3bbPcadgR5yes42K4JrYMFqygoWLPyfAg4Q5spH6bMH",
+              "5GZmHXcxXBS3gX9kgh8VNkmwGLezjCeb6PiQjkb5irPqq7eU",
               1
             ],
             [
-              "5H3phgrTxjFcgBbwDUd1HrDcDb3qadfGdBkdHM5gZf9SRRoN",
+              "5Gb4cT7YWKPWN1Bm2ix3n5aLfYBEJHZnT4rxfRLht2uZt2rz",
               1
             ],
             [
-              "5CqsNdzzRKA2kJdgxHx4VZ6MnpneMy6zh9qKJHkZ5reNtzVj",
+              "5HLN17LsCZ9jKTSgQb9c5i5Kn7mieTZxfnRpF5mXHqnokriR",
               1
             ],
             [
-              "5HBxoDQ95gmnUVmeT8XcdHVZ82ZnZMku8TaSaCbHiYpW922b",
+              "5EWUwAgL7DMHwrivqUXDq3DZfZ7n22QyW4zSSxr7imakQwtS",
               1
             ]
           ]
         },
         "sudo": {
-          "key": "5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva"
+          "key": "5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog"
         }
       }
     }

@@ -33,34 +33,34 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
     .with_genesis_config_patch(mainnet_genesis(
         // Initial PoA authorities (Validators)
         vec![
-            // Validator 1 (validator-01) - Also sudo account
+            // Validator 1 (qxchain-validator-01) - Also sudo account
             authority_keys_from_ss58(
-                "5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva", // Aura
-                "5HHuZ3bbPcadgR5yes42K4JrYMFqygoWLPyfAg4Q5spH6bMH", // Grandpa
+                "5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog", // Aura
+                "5GZmHXcxXBS3gX9kgh8VNkmwGLezjCeb6PiQjkb5irPqq7eU", // Grandpa
             ),
-            // Validator 2 (validator-02)
+            // Validator 2 (qxchain-validator-02)
             authority_keys_from_ss58(
-                "5D2Wg5PJgksxeARcGcGPR55nshKDZ7xZNpG1g1nY3bkFGgYT", // Aura
-                "5H3phgrTxjFcgBbwDUd1HrDcDb3qadfGdBkdHM5gZf9SRRoN", // Grandpa
+                "5H6Tf2hamehd3ioXa33zyYWxZriFFdytkUN8kNUu5qjbLYa8", // Aura
+                "5Gb4cT7YWKPWN1Bm2ix3n5aLfYBEJHZnT4rxfRLht2uZt2rz", // Grandpa
             ),
-            // Validator 3 (validator-03)
+            // Validator 3 (qxchain-validator-03)
             authority_keys_from_ss58(
-                "5DyMwhkTjr3W8edx1miE7rTVj3Sg2zwQajemyRnkh6HsSc3J", // Aura
-                "5CqsNdzzRKA2kJdgxHx4VZ6MnpneMy6zh9qKJHkZ5reNtzVj", // Grandpa
+                "5EsSP19v8UXzuAdncoKNuuRmiGdyjDdRBBqecgS77jA54W9Z", // Aura
+                "5HLN17LsCZ9jKTSgQb9c5i5Kn7mieTZxfnRpF5mXHqnokriR", // Grandpa
             ),
-            // Validator 4 (validator-04)
+            // Validator 4 (qxchain-validator-04)
             authority_keys_from_ss58(
-                "5ELgkJdjkkLQzi8k5giKpEWZhreMJMXBmeKa19B5Fy1gzi44", // Aura
-                "5HBxoDQ95gmnUVmeT8XcdHVZ82ZnZMku8TaSaCbHiYpW922b", // Grandpa
+                "5CFFugsxfkHK1PQgsd4r7Ge6vtXX6oEdko9nhTUmCKvKti9k", // Aura
+                "5EWUwAgL7DMHwrivqUXDq3DZfZ7n22QyW4zSSxr7imakQwtS", // Grandpa
             ),
         ],
         // Sudo account - validator-01
-        Ss58Codec::from_ss58check("5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva").unwrap(),
+        Ss58Codec::from_ss58check("5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog").unwrap(),
         // Pre-funded accounts for mainnet
         vec![
             // Validator 1 (sudo) - Pre-funded for transaction fees
             (
-                Ss58Codec::from_ss58check("5FUK2frew1ogfbMDuHBSwMaga3dEGJp11ZQLjmtxZs7rwcva").unwrap(),
+                Ss58Codec::from_ss58check("5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog").unwrap(),
                 1_000_000_000_000_000u128, // 1 million QX tokens
             ),
         ],

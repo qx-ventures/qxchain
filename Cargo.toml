@@ -31,7 +31,7 @@ opt-level = 3
 panic = "unwind"
 
 [profile.production]
-codegen-units = 1
+codegen-units = 4        # Balance between optimization and memory (was 1) TODO: Use 1 for production
 inherits = "release"
-lto = true
+lto = "thin"             # Use thin LTO instead of full (less memory) TODO: Use full for production
 

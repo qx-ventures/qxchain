@@ -36,6 +36,22 @@ check_subkey() {
     fi
 }
 
+# Check if jq is installed (needed for JSON parsing)
+check_jq() {
+    if command -v jq &> /dev/null; then
+        echo -e "${GREEN}✓ jq is already installed${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}✗ jq is not installed (needed for node key generation)${NC}"
+        echo ""
+        echo "Install jq with:"
+        echo "  macOS:   brew install jq"
+        echo "  Ubuntu:  sudo apt-get install jq"
+        echo "  Other:   https://jqlang.github.io/jq/download/"
+        return 1
+    fi
+}
+
 # Install subkey
 install_subkey() {
     echo ""
@@ -167,6 +183,32 @@ generate_validator_set() {
     GRANDPA_SEED=$(echo "$GRANDPA_OUTPUT" | grep "Secret seed" | awk '{print $3}')
     GRANDPA_PHRASE=$(echo "$GRANDPA_OUTPUT" | grep "Secret phrase" | cut -d'`' -f2)
 
+    echo ""
+    echo -e "${YELLOW}3. NODE KEY (Ed25519 - P2P Networking)${NC}"
+    echo ""
+
+    # Check if jq is available for JSON parsing
+    if command -v jq &> /dev/null; then
+        NODE_OUTPUT=$(subkey generate --scheme ed25519 --output-type json)
+        echo "$NODE_OUTPUT" | jq '.'
+        NODE_SECRET=$(echo "$NODE_OUTPUT" | jq -r '.secretSeed' | sed 's/0x//')
+        NODE_PUBLIC=$(echo "$NODE_OUTPUT" | jq -r '.publicKey')
+        NODE_SS58=$(echo "$NODE_OUTPUT" | jq -r '.ss58Address')
+
+        echo ""
+        echo -e "${BLUE}Node key generated. Peer ID will be computed when node starts.${NC}"
+        echo -e "${YELLOW}To get Peer ID: Start the node and check logs for 'Local node identity'${NC}"
+        PEER_ID="<WILL_BE_COMPUTED_ON_STARTUP>"
+    else
+        echo -e "${YELLOW}⚠ jq not found - generating node key without JSON parsing${NC}"
+        NODE_OUTPUT=$(subkey generate --scheme ed25519)
+        echo "$NODE_OUTPUT"
+        NODE_SECRET=$(echo "$NODE_OUTPUT" | grep "Secret seed" | awk '{print $3}' | sed 's/0x//')
+        NODE_PUBLIC=$(echo "$NODE_OUTPUT" | grep "Public key" | grep -v "SS58" | awk '{print $4}')
+        NODE_SS58=$(echo "$NODE_OUTPUT" | grep "SS58 Address" | awk '{print $3}')
+        PEER_ID="<START_NODE_TO_GET_PEER_ID>"
+    fi
+
     # Save to file
     cat > "$FILENAME" << EOF
 ================================================================================
@@ -195,6 +237,13 @@ Account ID:    ${GRANDPA_ACCOUNT}
 SS58 Address:  ${GRANDPA_SS58}
 
 ================================================================================
+NODE KEY (Ed25519 - P2P Networking)
+================================================================================
+Node Key (hex): ${NODE_SECRET}
+Public Key:     ${NODE_PUBLIC}
+Peer ID:        ${PEER_ID} (get from logs after first start)
+
+================================================================================
 Chain Spec Usage (chain_spec/mainnet.rs)
 ================================================================================
 authority_keys_from_ss58(
@@ -203,17 +252,20 @@ authority_keys_from_ss58(
 ),
 
 ================================================================================
-Insert Keys Commands (for running node)
+Bootnode (get Peer ID from logs after first start)
 ================================================================================
-# Insert Aura key
-curl -H "Content-Type: application/json" \\
-  --data '{"jsonrpc":"2.0","method":"author_insertKey","params":["aura","${AURA_PHRASE}","${AURA_PUBLIC}"],"id":1}' \\
-  http://localhost:9944
+"/dns/your-domain.com/tcp/30333/p2p/<PEER_ID>"
 
-# Insert Grandpa key
-curl -H "Content-Type: application/json" \\
-  --data '{"jsonrpc":"2.0","method":"author_insertKey","params":["gran","${GRANDPA_PHRASE}","${GRANDPA_PUBLIC}"],"id":1}' \\
-  http://localhost:9944
+================================================================================
+Docker Command
+================================================================================
+--node-key ${NODE_SECRET}
+
+================================================================================
+Insert Keys (via docker exec ... curl)
+================================================================================
+["aura","${AURA_PHRASE}","${AURA_PUBLIC}"]
+["gran","${GRANDPA_PHRASE}","${GRANDPA_PUBLIC}"]
 
 ================================================================================
 EOF
@@ -227,12 +279,10 @@ EOF
     echo ""
     echo -e "${YELLOW}IMPORTANT: Keep this file secure!${NC}"
     echo ""
-    echo -e "${BLUE}Chain spec code snippet:${NC}"
+    echo -e "${BLUE}Chain Spec:${NC}"
+    echo "authority_keys_from_ss58(\"${AURA_SS58}\", \"${GRANDPA_SS58}\"),"
     echo ""
-    echo "authority_keys_from_ss58("
-    echo "    \"${AURA_SS58}\",  // Aura"
-    echo "    \"${GRANDPA_SS58}\"   // Grandpa"
-    echo "),"
+    echo -e "${BLUE}Node Key:${NC} --node-key ${NODE_SECRET}"
     echo ""
 }
 
@@ -323,6 +373,18 @@ if ! check_subkey; then
         echo "1) Cargo: cargo install --force subkey --git https://github.com/paritytech/polkadot-sdk --tag polkadot-stable2506 --locked"
         echo "2) Docker: docker run --rm -i docker.io/parity/subkey:latest --version"
         echo ""
+        exit 1
+    fi
+fi
+
+echo ""
+if ! check_jq; then
+    echo ""
+    echo -e "${YELLOW}jq is required for node key generation${NC}"
+    echo -e "${YELLOW}Please install it before generating validator keys${NC}"
+    echo ""
+    read -p "Continue anyway? (node key generation will be skipped) [y/N]: " continue_choice
+    if [[ ! $continue_choice =~ ^[Yy]$ ]]; then
         exit 1
     fi
 fi

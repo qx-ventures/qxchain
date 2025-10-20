@@ -38,7 +38,7 @@ RUN cargo build -p qxchain --profile production --locked \
 ###############################################################################
 # ---------- 3. Final production image (hardened) ----------------------------
 ###############################################################################
-FROM ${BASE_IMAGE} AS qxchain
+FROM ${BASE_IMAGE} AS qxchain-production
 
 # ---- security hardening: create least-privilege user ----
 RUN addgroup --system --gid 10001 qxchain && \
