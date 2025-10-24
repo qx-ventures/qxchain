@@ -12,34 +12,49 @@ QX Chain has a three-layer architecture that separates blockchain consensus from
 
 ## Application Layer
 
-**AIWorkers**: Civic entities (e.g., zoo department, parks office) that run off-chain AI inference using domain-specific models. They:
-- Register services on-chain with metadata (service type, model hash, stake collateral)
-- Submit cryptographic commitments immediately after inference
+**AIWorkers**: Civic entities (e.g., zoo department, parks office) that run off-chain AI inference using allowed models. They:
+- Register services on-chain with stake collateral
+- Run inference using HuggingFace models from the allowed registry
+- Capture SHA-256 hashes of logits at every token during generation
+- Submit complete cryptographic proofs immediately after inference
 - Stake collateral to ensure honest behavior
 
-**AIValidators**: Independent entities that audit worker submissions during 7-day challenge windows. They:
-- Reproduce inference using committed model hash and input
-- Compare outputs to detect discrepancies
-- Submit challenges if errors are found
-- Earn rewards for successful challenges
+**AIValidators**: Independent entities that audit worker submissions by verifying random checkpoints. They:
+- Download allowed models from HuggingFace on-demand
+- Select random checkpoints (5-10% of tokens) to verify
+- Re-run inference up to each checkpoint and compare logit hashes
+- Submit challenges if mismatches are found
+- Economic incentive: validators with stake weight > 51% can slash dishonest workers
 
 ## AI Verification Protocol
 
-QX introduces an **optimistic worker-validator verification protocol** that operates at the application layer, separate from blockchain consensus.
+QX uses **logit-based verification** - a cryptographic proof system that operates at the application layer, separate from blockchain consensus.
 
 ### How It Works
 
-1. **Immediate Submission**: AIWorkers perform AI inference off-chain and immediately submit cryptographic commitments on-chain
-2. **Challenge Window**: AIValidators have a 7-day challenge window to audit and dispute incorrect submissions
-3. **Stake-Based Resolution**: If over 51% of validators reject a submission, the worker's stake is slashed and the result marked invalid
-4. **Economic Security**: Challenge-based validation with stake slashing ensures honest participation
+1. **Inference with Proof Generation**: AIWorkers run AI inference using allowed HuggingFace models and capture SHA-256 hashes of logits at every token
+2. **Immediate Submission**: Workers submit the generated output along with complete cryptographic proof on-chain (result available immediately)
+3. **Checkpoint Validation**: AIValidators download required models and verify random checkpoints (typically 5-10% of tokens)
+4. **Challenge Period**: Validators have a configurable window to audit and dispute incorrect submissions
+5. **Stake-Based Resolution**: If over 51% of validators find mismatches, the worker's stake is slashed
+6. **Economic Security**: Cryptographic proofs combined with stake slashing ensures honest participation
 
 ### Key Parameters
 
-- **Challenge Period**: 7 days (100,800 blocks at 6-second block time)
+- **Challenge Period**: Configurable in blocks (default: 100,800 blocks = 7 days at 6-second block time)
+- **Checkpoint Percentage**: 5-10% of tokens verified (10-20x cheaper than full re-generation)
 - **Slash Threshold**: 51% of total validator stake weight
 - **MinAIWorkerStake**: 1 token (configurable in runtime)
 - **MinChallengeStake**: 1 token (configurable in runtime)
+
+### Allowed Models
+
+Workers must use models from the allowed registry (hardcoded in runtime, updated via governance):
+- **Model 0**: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+- **Model 1**: meta-llama/Llama-3.2-1B
+- (Additional models will be added)
+
+Validators download models on-demand from HuggingFace for verification.
 
 ## Workflow
 
