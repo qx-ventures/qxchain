@@ -11,9 +11,10 @@ edition.workspace = true
 codec = { features = ["derive"], workspace = true }
 scale-info = { features = ["derive"], workspace = true }
 polkadot-sdk = { workspace = true, default-features = false, features = ["pallet-balances", "runtime"] }
+serde = { features = ["derive"], workspace = true, optional = true }
 
 [features]
 default = ["std"]
-std = ["codec/std", "polkadot-sdk/std", "scale-info/std"]
+std = ["codec/std", "polkadot-sdk/std", "scale-info/std", "serde"]
 runtime-benchmarks = ["polkadot-sdk/runtime-benchmarks"]
 try-runtime = ["polkadot-sdk/try-runtime"]

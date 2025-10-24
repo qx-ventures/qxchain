@@ -24,6 +24,7 @@ jsonrpsee = { version = "0.24.3" }
 polkadot-sdk = { version = "2503.0.1", default-features = false }
 codec = { version = "3.7.4", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.132", default-features = false }
 
 [profile.release]
