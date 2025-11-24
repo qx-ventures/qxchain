@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 codec = { workspace = true }
 pallet-qx-ai = { path = "../pallets/pallet-qx-ai", default-features = false }
+pallet-qx-kilt-permissions = { path = "../pallets/pallet-qx-kilt-permissions", default-features = false }
 polkadot-sdk = { workspace = true, features = [
 	"frame-executive",
 	"frame-metadata-hash-extension",
@@ -55,6 +56,7 @@ default = ["std"]
 std = [
 	"codec/std",
 	"pallet-qx-ai/std",
+	"pallet-qx-kilt-permissions/std",
 	"polkadot-sdk/std",
 	"scale-info/std",
 	"serde_json/std",

@@ -371,10 +371,10 @@ Follow conventional commits:
 
 ```
 feat: add worker queue limit
-fix: correct stake slashing calculation
+fix: correct KILT credential verification
 docs: update deployment guide
 refactor: simplify chain spec generation
-test: add validator challenge tests
+test: add worker authorization tests
 ```
 
 ## CI/CD

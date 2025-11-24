@@ -1,6 +1,8 @@
 # Docker Deployment
 
-QXChain provides production-ready Docker images for easy deployment.
+QXChain provides production-ready Docker images for easy deployment of **consensus validators**.
+
+> **Note**: This guide covers Docker deployment for **blockchain consensus validators** (AURA + GRANDPA), not AIWorkers. AIWorkers are application-layer entities that require KILT credentials and are deployed separately using the qxchain_connect tool.
 
 ## Docker Targets
 

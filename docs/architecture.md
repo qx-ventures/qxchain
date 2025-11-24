@@ -1,6 +1,6 @@
 # Architecture
 
-QX Chain has a three-layer architecture that separates blockchain consensus from AI verification.
+QX Chain has a two-layer architecture that separates blockchain consensus from permissioned AI execution.
 
 ## Consensus Layer
 
@@ -8,44 +8,33 @@ QX Chain has a three-layer architecture that separates blockchain consensus from
 - Authority nodes secure the blockchain using AURA for block production and GRANDPA for finality
 - Designed for permissioned networks with pre-selected authority validators
 - Mainnet runs with 4 production validators
-- Standard Substrate consensus nodes (NOT AIWorkers/AIValidators)
 
 ## Application Layer
 
-**AIWorkers**: Civic entities (e.g., zoo department, parks office) that run off-chain AI inference using allowed models. They:
-- Register services on-chain with stake collateral
+**AIWorkers**: Trusted civic entities (e.g., zoo department, parks office) that run off-chain AI inference using allowed models. They:
+- Must possess verified KILT credentials (DIDs) to register
+- Credentials are issued by trusted attestors (city authorities, civic organizations)
 - Run inference using HuggingFace models from the allowed registry
-- Capture SHA-256 hashes of logits at every token during generation
-- Submit complete cryptographic proofs immediately after inference
-- Stake collateral to ensure honest behavior
+- Submit inference results directly to the blockchain
 
-**AIValidators**: Independent entities that audit worker submissions by verifying random checkpoints. They:
-- Download allowed models from HuggingFace on-demand
-- Select random checkpoints (5-10% of tokens) to verify
-- Re-run inference up to each checkpoint and compare logit hashes
-- Submit challenges if mismatches are found
-- Economic incentive: validators with stake weight > 51% can slash dishonest workers
+## Identity & Permission Protocol
 
-## AI Verification Protocol
-
-QX uses **logit-based verification** - a cryptographic proof system that operates at the application layer, separate from blockchain consensus.
+QX uses **KILT-based credential verification** - a decentralized identity system that operates at the application layer, separate from blockchain consensus.
 
 ### How It Works
 
-1. **Inference with Proof Generation**: AIWorkers run AI inference using allowed HuggingFace models and capture SHA-256 hashes of logits at every token
-2. **Immediate Submission**: Workers submit the generated output along with complete cryptographic proof on-chain (result available immediately)
-3. **Checkpoint Validation**: AIValidators download required models and verify random checkpoints (typically 5-10% of tokens)
-4. **Challenge Period**: Validators have a configurable window to audit and dispute incorrect submissions
-5. **Stake-Based Resolution**: If over 51% of validators find mismatches, the worker's stake is slashed
-6. **Economic Security**: Cryptographic proofs combined with stake slashing ensures honest participation
+1. **Credential Issuance**: Civic entities receive KILT credentials from trusted attestors (e.g., city government)
+2. **Worker Registration**: AIWorkers register on-chain by presenting valid KILT credentials
+3. **Credential Verification**: The `pallet-qx-kilt-permissions` pallet verifies worker credentials on-chain
+4. **Request Processing**: Only workers with valid credentials can receive and process inference requests
+5. **Inference Submission**: Workers submit results directly
+6. **Trust Model**: Trust is established through credential verification at the identity layer
 
-### Key Parameters
+### Key Components
 
-- **Challenge Period**: Configurable in blocks (default: 100,800 blocks = 7 days at 6-second block time)
-- **Checkpoint Percentage**: 5-10% of tokens verified (10-20x cheaper than full re-generation)
-- **Slash Threshold**: 51% of total validator stake weight
-- **MinAIWorkerStake**: 1 token (configurable in runtime)
-- **MinChallengeStake**: 1 token (configurable in runtime)
+- **KILT DIDs**: Decentralized identifiers for AIWorkers
+- **Verifiable Credentials**: Attestations proving worker authorization
+- **pallet-qx-kilt-permissions**: On-chain credential verification
 
 ### Allowed Models
 
@@ -54,27 +43,24 @@ Workers must use models from the allowed registry (hardcoded in runtime, updated
 - **Model 1**: meta-llama/Llama-3.2-1B
 - (Additional models will be added)
 
-Validators download models on-demand from HuggingFace for verification.
+Workers can only use models they are authorized for in their KILT credentials.
 
 ## Workflow
 
-1. **Worker Registration**: AI workers stake tokens and register on-chain with status tracking
-2. **Request Submission**: Customers submit inference requests to specific workers
-3. **Queue Management**: Workers maintain queues of pending requests (max 100 per worker)
-4. **Inference Processing**: Workers process requests and submit results to blockchain
-5. **Challenge Period**: Validators can challenge incorrect inferences within 7 days
-6. **Validation**: Consensus determines if inference is correct
-7. **Rewards/Slashing**: Honest participants earn rewards, malicious actors are slashed
+1. **Credential Issuance**: Civic entities receive KILT credentials from trusted attestors
+2. **Worker Authorization**: AIWorkers verify their KILT credentials on-chain to gain authorization
+3. **Request Submission**: Customers submit inference requests to specific authorized workers
+4. **Queue Management**: Workers maintain queues of pending requests (max 100 per worker)
+5. **Inference Processing**: Workers process requests off-chain using allowed models
+6. **Result Submission**: Workers submit results directly to blockchain with their KILT DID
+7. **Immediate Completion**: Results are immediately available
 
 ## Request Lifecycle
 
 1. **Queued**: Request submitted to worker's queue
-2. **Assigned**: Request assigned to worker for processing
-3. **Completed**: Result submitted to blockchain with 7-day challenge period
-4. **Pending**: Awaiting potential validator challenges during dispute window
-5. **Challenged**: Under dispute by validators (if challenged)
-6. **Finalized**: Challenge period passed, result accepted as valid
-7. **Slashed**: Challenge succeeded, worker penalized and banned
+2. **Processing**: Worker processes the request off-chain
+3. **Completed**: Result submitted to blockchain and immediately available to customer
+4. **Failed**: Request fails if worker encounters an error
 
 ## Project Structure
 
@@ -90,7 +76,8 @@ qxchain/
 │       └── main.rs                 # Node entry point
 ├── runtime/                         # Runtime logic and configuration
 ├── pallets/
-│   └── pallet-qx-ai/               # Custom opML pallet for AI verification
+│   ├── pallet-qx-ai/               # AI inference execution and request management
+│   └── pallet-qx-kilt-permissions/ # KILT DID credential verification
 ├── chainspecs/                      # Generated chain specification files
 │   ├── raw_spec_mainnet.json       # Production network spec (use this)
 │   ├── raw_spec_localnet.json      # Multi-validator local testnet

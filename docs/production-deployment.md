@@ -1,13 +1,15 @@
 # Production Deployment
 
-This guide walks through deploying QXChain validators in production.
+This guide walks through deploying QXChain **consensus validators** in production.
+
+> **Note**: This guide covers **blockchain consensus validators** (AURA + GRANDPA), not AIWorkers. AIWorkers are application-layer entities that require KILT credentials and are deployed separately using the qxchain_connect tool.
 
 ## Prerequisites
 
 - Linux server (AMD64 architecture)
 - Docker installed
 - Azure account (if using Azure Container Apps)
-- Basic understanding of blockchain validators
+- Basic understanding of blockchain consensus validators
 
 ## Step 1: Generate Validator Keys
 

@@ -10,6 +10,7 @@ default-members = ["node", "runtime"]
 members = [
     "node",
     "pallets/pallet-qx-ai",
+    "pallets/pallet-qx-kilt-permissions",
     "runtime",
 ]
 resolver = "2"
@@ -26,6 +27,10 @@ codec = { version = "3.7.4", default-features = false, package = "parity-scale-c
 scale-info = { version = "2.11.6", default-features = false }
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.132", default-features = false }
+
+# KILT dependencies (simplified for now, we'll implement our own DID system)
+# kilt-dip-primitives = { version = "2.1.0", default-features = false }
+# did = { version = "1.0.0", default-features = false }
 
 [profile.release]
 opt-level = 3

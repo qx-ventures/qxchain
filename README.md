@@ -1,15 +1,13 @@
-# QX Chain - Verifiable AI Inference
+# QX Chain - Permissioned AI Inference
 
-QX Chain is a Substrate-based blockchain designed as the infrastructure for verifiable AI execution. It provides blockchain infrastructure for cities, specializing in verifiable AI execution, identity management, and policy compliance.
+QX Chain is a Substrate-based blockchain designed as the infrastructure for permissioned AI execution. It provides blockchain infrastructure for cities, specializing in credential-based AI execution, identity management, and policy compliance.
 
 ## Key Features
 
-- **Optimistic AI Verification**: AIWorkers submit results immediately with cryptographic commitments. Results are valid unless challenged within a 7-day dispute window.
-- **Economic Security**: Challenge-based validation with stake slashing ensures honest participation.
-- **Off-Chain Computation, On-Chain Trust**: Heavy AI inference executes off-chain while only cryptographic proofs are stored on-chain.
-- **Application Layer Architecture**: AIWorkers and AIValidators are application-layer entities. Blockchain consensus uses AURA + GRANDPA (Proof of Authority).
-- **7-Day Challenge Period**: Validators have 100,800 blocks (~7 days) to audit and challenge worker submissions.
-
+- **KILT-Based Permissioning**: AIWorkers must possess verified KILT credentials to operate on the network.
+- **Decentralized Identity**: Worker authorization via KILT DIDs ensures trusted civic entities.
+- **Off-Chain Computation, On-Chain Registry**: Heavy AI inference executes off-chain while only worker credentials and status are tracked on-chain.
+- **Application Layer Architecture**: AIWorkers are application-layer entities verified through KILT credentials. Blockchain consensus uses AURA + GRANDPA (Proof of Authority).
 ## Quick Start
 
 ### Prerequisites

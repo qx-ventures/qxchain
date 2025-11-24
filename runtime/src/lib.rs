@@ -157,7 +157,6 @@ pub type SignedExtra = (
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
 	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
-	frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
@@ -287,14 +286,32 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
+/// Configure the QX KILT Permissions pallet
+impl pallet_qx_kilt_permissions::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type DefaultCredentialValidity = ConstU32<{ 30 * DAYS }>;
+	type WorkerSuspensionPeriod = ConstU32<{ 1 * DAYS }>;
+}
+
+/// Implement KiltPermissions trait for the runtime
+pub struct KiltPermissionsImpl;
+
+impl pallet_qx_ai::KiltPermissions<AccountId> for KiltPermissionsImpl {
+	fn verify_worker_credential(did: &pallet_qx_ai::DidIdentifier) -> Result<bool, sp_runtime::DispatchError> {
+		pallet_qx_kilt_permissions::Pallet::<Runtime>::verify_worker_credential(did)
+	}
+
+	fn get_worker_did(account: &AccountId) -> Result<pallet_qx_ai::DidIdentifier, sp_runtime::DispatchError> {
+		pallet_qx_kilt_permissions::Pallet::<Runtime>::get_worker_did(account)
+	}
+}
+
 /// Configure the QX AI pallet
 impl pallet_qx_ai::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
-	type MinAIWorkerStake = ConstU128<1>;
-	type MinChallengeStake = ConstU128<1>;
-	type ChallengePeriod = ConstU32<{ 7 * DAYS }>;  // 7 days challenge period
-	type SlashThreshold = ConstU32<51>;  // 51% threshold for slashing
+	type KiltPermissions = KiltPermissionsImpl;
 	type MaxQueueSize = ConstU32<100>;  // Max 100 requests per worker
 }
 
@@ -338,6 +355,9 @@ mod runtime {
 	pub type Sudo = polkadot_sdk::pallet_sudo;
 
 	#[runtime::pallet_index(7)]
+	pub type QxKiltPermissions = pallet_qx_kilt_permissions;
+
+	#[runtime::pallet_index(8)]
 	pub type QxAi = pallet_qx_ai;
 }
 

@@ -9209,6 +9209,17 @@ dependencies = [
 name = "pallet-qx-ai"
 version = "0.1.0"
 dependencies = [
+ "pallet-qx-kilt-permissions",
+ "parity-scale-codec",
+ "polkadot-sdk 2503.0.1",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
+name = "pallet-qx-kilt-permissions"
+version = "0.1.0"
+dependencies = [
  "parity-scale-codec",
  "polkadot-sdk 2503.0.1",
  "scale-info",
@@ -12699,6 +12710,7 @@ name = "qxchain-runtime"
 version = "0.1.0"
 dependencies = [
  "pallet-qx-ai",
+ "pallet-qx-kilt-permissions",
  "parity-scale-codec",
  "polkadot-sdk 2503.0.1",
  "scale-info",

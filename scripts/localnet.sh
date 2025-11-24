@@ -42,7 +42,7 @@ else
   echo "fast_runtime is On"
   : "${CHAIN:=localnet}"
   : "${BUILD_BINARY:=1}"
-  : "${FEATURES:="fast-runtime"}"
+  : "${FEATURES:=""}"
   BUILD_DIR="$BASE_DIR/target/fast-runtime"
 fi
 
@@ -67,9 +67,13 @@ if [[ "$BUILD_BINARY" == "1" ]]; then
     cargo build
     --workspace
     --profile=release
-    --features "$FEATURES"
     --manifest-path "$BASE_DIR/Cargo.toml"
   )
+
+  # Only add --features flag if FEATURES is not empty
+  if [[ -n "$FEATURES" ]]; then
+    BUILD_CMD+=(--features "$FEATURES")
+  fi
 
   if [[ -n "$CARGO_BUILD_TARGET" ]]; then
     echo "[+] Cross-compiling for target: $CARGO_BUILD_TARGET"
