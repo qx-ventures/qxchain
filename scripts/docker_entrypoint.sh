@@ -52,5 +52,5 @@ if [ -d "/tmp/blockchain" ]; then
 fi
 
 # Execute qxchain with the original, unmodified arguments
-echo "executing: gosu qxchain qxchain $original_args"
-exec gosu qxchain qxchain $original_args
+echo "executing: qxchain $original_args"
+exec qxchain $original_args
