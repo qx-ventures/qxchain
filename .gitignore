@@ -9,3 +9,4 @@ data
 
 # Validator keys - NEVER commit these!
 scripts/node_keys/
+power_results/runs/
