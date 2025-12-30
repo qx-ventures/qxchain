@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 codec = { workspace = true }
 pallet-qx-ai = { path = "../pallets/pallet-qx-ai", default-features = false }
+pallet-qx-faucet = { path = "../pallets/pallet-qx-faucet", default-features = false }
 pallet-qx-kilt-permissions = { path = "../pallets/pallet-qx-kilt-permissions", default-features = false }
 polkadot-sdk = { workspace = true, features = [
 	"frame-executive",
@@ -29,6 +30,7 @@ polkadot-sdk = { workspace = true, features = [
 	"pallet-timestamp",
 	"pallet-transaction-payment",
 	"pallet-transaction-payment-rpc-runtime-api",
+	"pallet-skip-feeless-payment",
 	"sp-api",
 	"sp-block-builder",
 	"sp-consensus-aura",
@@ -56,6 +58,7 @@ default = ["std"]
 std = [
 	"codec/std",
 	"pallet-qx-ai/std",
+	"pallet-qx-faucet/std",
 	"pallet-qx-kilt-permissions/std",
 	"polkadot-sdk/std",
 	"scale-info/std",

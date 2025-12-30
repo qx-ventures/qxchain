@@ -11,6 +11,7 @@ extern crate alloc;
 use frame::prelude::*;
 use polkadot_sdk::polkadot_sdk_frame as frame;
 
+use frame::deps::frame_support::dispatch::{DispatchClass, Pays};
 use frame::traits::{Currency, ReservableCurrency, Get};
 
 pub use pallet::*;
@@ -50,7 +51,6 @@ pub struct InferenceRequest<AccountId> {
 	pub customer: AccountId,
 	pub target_worker: AccountId,
 	pub prompt: BoundedVec<u8, ConstU32<2048>>,
-	pub model_id: u32,
 	pub max_tokens: u32,  // Maximum number of tokens to generate
 	pub status: RequestStatus,
 	pub created_at: u32,
@@ -63,7 +63,6 @@ pub struct InferenceResult<AccountId> {
 	pub worker: AccountId,
 	pub worker_did: DidIdentifier,
 	pub output: BoundedVec<u8, ConstU32<4096>>,
-	pub model_id: u32,
 	pub status: InferenceStatus,
 	pub submitted_at: u32,
 }
@@ -149,7 +148,7 @@ pub mod pallet {
 		RequestSubmitted {
 			request_id: u32,
 			customer: T::AccountId,
-			model_id: u32
+			worker: T::AccountId,
 		},
 		/// Request assigned to AIWorker
 		RequestAssigned {
@@ -189,10 +188,6 @@ pub mod pallet {
 		InferenceNotFound,
 		/// Request not found
 		RequestNotFound,
-		/// Invalid model ID
-		InvalidModel,
-		/// Model not active
-		ModelNotActive,
 		/// AIWorker queue full
 		AIWorkerQueueFull,
 		/// Request already assigned
@@ -214,7 +209,6 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			target_worker: T::AccountId,
 			prompt: BoundedVec<u8, ConstU32<2048>>,
-			model_id: u32,
 			max_tokens: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
@@ -233,9 +227,6 @@ pub mod pallet {
 
 			ensure!(is_valid, Error::<T>::InvalidWorkerCredential);
 
-			let model = AllowedModels::<T>::get(model_id).ok_or(Error::<T>::InvalidModel)?;
-			ensure!(model.active, Error::<T>::ModelNotActive);
-
 			let request_id = NextRequestId::<T>::get();
 			NextRequestId::<T>::put(request_id + 1);
 
@@ -246,7 +237,6 @@ pub mod pallet {
 				customer: who.clone(),
 				target_worker: target_worker.clone(),
 				prompt,
-				model_id,
 				max_tokens,
 				status: RequestStatus::Queued,
 				created_at: block_number,
@@ -264,7 +254,7 @@ pub mod pallet {
 			Self::deposit_event(Event::RequestSubmitted {
 				request_id,
 				customer: who,
-				model_id
+				worker: target_worker.clone(),
 			});
 			Self::deposit_event(Event::RequestAssigned {
 				request_id,
@@ -275,12 +265,13 @@ pub mod pallet {
 		}
 
 		/// Update AIWorker online status
+		/// FREE for credentialed workers (Pays::No)
 		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight((Weight::from_parts(10_000, 0), DispatchClass::Normal, Pays::No))]
 		pub fn update_ai_worker_status(
 			origin: OriginFor<T>,
 			online: bool,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			// Verify worker has valid KILT credential
@@ -297,18 +288,19 @@ pub mod pallet {
 				online
 			});
 
-			Ok(())
+			// Worker is credentialed, so transaction is free
+			Ok(Pays::No.into())
 		}
 
 		/// Submit inference result
+		/// FREE for credentialed workers (Pays::No)
 		#[pallet::call_index(2)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight((Weight::from_parts(10_000, 0), DispatchClass::Normal, Pays::No))]
 		pub fn submit_inference(
 			origin: OriginFor<T>,
 			request_id: u32,
 			output: BoundedVec<u8, ConstU32<4096>>,
-			model_id: u32,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			// Verify worker has valid KILT credential
@@ -318,15 +310,11 @@ pub mod pallet {
 				Error::<T>::InvalidWorkerCredential
 			);
 
-			let model = AllowedModels::<T>::get(model_id).ok_or(Error::<T>::InvalidModel)?;
-			ensure!(model.active, Error::<T>::ModelNotActive);
-
 			let request = InferenceRequests::<T>::get(&request_id)
 				.ok_or(Error::<T>::RequestNotFound)?;
 
 			ensure!(request.target_worker == who, Error::<T>::RequestNotAssigned);
 			ensure!(request.status == RequestStatus::Queued, Error::<T>::RequestAlreadyAssigned);
-			ensure!(request.model_id == model_id, Error::<T>::InvalidModel);
 
 			let inference_id = NextInferenceId::<T>::get();
 			NextInferenceId::<T>::put(inference_id + 1);
@@ -339,7 +327,6 @@ pub mod pallet {
 				worker: who.clone(),
 				worker_did,
 				output,
-				model_id,
 				status: InferenceStatus::Completed,
 				submitted_at: block_number,
 			};
@@ -371,7 +358,8 @@ pub mod pallet {
 				inference_id
 			});
 
-			Ok(())
+			// Worker is credentialed, so transaction is free
+			Ok(Pays::No.into())
 		}
 
 		/// Add an allowed model (requires root/sudo)

@@ -10,6 +10,7 @@ default-members = ["node", "runtime"]
 members = [
     "node",
     "pallets/pallet-qx-ai",
+    "pallets/pallet-qx-faucet",
     "pallets/pallet-qx-kilt-permissions",
     "runtime",
 ]

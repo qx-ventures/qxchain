@@ -63,6 +63,11 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
                 Ss58Codec::from_ss58check("5GyAAHVMUiumNzDxQAYT4uUNPGuufv383MiKyDNkwTndHBog").unwrap(),
                 1_000_000_000_000_000u128, // 1 million QX tokens
             ),
+            // Faucet pot - 1 million QX for user onboarding
+            (
+                faucet_pot_account(),
+                1_000_000_000_000_000_000u128, // 1 million QX tokens
+            ),
         ],
     ))
     .with_properties(properties)
