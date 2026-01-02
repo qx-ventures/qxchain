@@ -1,7 +1,12 @@
 #!/bin/bash
-# QXChain Power Measurement - Comprehensive blockchain function testing
+# QXChain RPC Power Measurement - Measures power for RPC/query operations
+# This script benchmarks READ operations (queries, state reads, RPC calls)
+#
+#   python3 scripts/measure_tx_power.py
+#
 # Creates timestamped folder with data and graphs
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAPL_PKG="/sys/class/powercap/intel-rapl:0/energy_uj"
 RAPL_CORE="/sys/class/powercap/intel-rapl:0:0/energy_uj"
 BASE_DIR="/home/teo/qxchain/power_results"
@@ -34,12 +39,19 @@ get_finalized() {
     echo $((16#${h#0x}))
 }
 
+get_extrinsic_count() {
+    local block=$(curl -s -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"chain_getBlock","params":[]}' "$RPC_URL" 2>/dev/null)
+    # Count extrinsics in the block (number of items in extrinsics array)
+    local count=$(echo "$block" | grep -o '"extrinsics":\[[^]]*\]' | grep -o '0x[^"]*' | wc -l)
+    echo "$count"
+}
+
 measure() {
     local name="$1"
     local samples="$2"
     local file="$DATA_DIR/${name}.csv"
 
-    echo "timestamp_ns,elapsed_ms,block,finalized,pkg_uj,core_uj,delta_pkg_uj,delta_core_uj,pkg_mw,core_mw" > "$file"
+    echo "timestamp_ns,elapsed_ms,block,finalized,extrinsics,pkg_uj,core_uj,delta_pkg_uj,delta_core_uj,pkg_mw,core_mw" > "$file"
 
     local prev_pkg=$(cat "$RAPL_PKG")
     local prev_core=$(cat "$RAPL_CORE")
@@ -53,13 +65,14 @@ measure() {
         local core=$(cat "$RAPL_CORE")
         local blk=$(get_block)
         local fin=$(get_finalized)
+        local ext=$(get_extrinsic_count)
         local elapsed=$(( (now - start) / 1000000 ))
         local dt=$(( (now - prev_t) / 1000 ))
         local dp=$((pkg - prev_pkg))
         local dc=$((core - prev_core))
         local pw=0 cw=0
         [ $dt -gt 0 ] && pw=$(( (dp * 1000) / dt )) && cw=$(( (dc * 1000) / dt ))
-        echo "$now,$elapsed,$blk,$fin,$pkg,$core,$dp,$dc,$pw,$cw" >> "$file"
+        echo "$now,$elapsed,$blk,$fin,$ext,$pkg,$core,$dp,$dc,$pw,$cw" >> "$file"
         prev_pkg=$pkg; prev_core=$core; prev_t=$now
     done
     echo "  -> $file ($samples samples)"
@@ -288,7 +301,7 @@ measure "runtime_api_calls" $SAMPLES
 kill $BG_PID 2>/dev/null; wait $BG_PID 2>/dev/null
 
 # 16. MIXED_WORKLOAD - Combined realistic workload
-echo "[16/16] mixed_workload..."
+echo "[16/19] mixed_workload..."
 (
 while true; do
     # Simulate realistic usage pattern
@@ -303,18 +316,60 @@ BG_PID=$!
 measure "mixed_workload" $SAMPLES
 kill $BG_PID 2>/dev/null; wait $BG_PID 2>/dev/null
 
+# ==============================================================================
+# BALANCE TRANSFER TESTS (with actual transactions)
+# ==============================================================================
+
+INJECT_SCRIPT="$SCRIPT_DIR/inject_transactions.py"
+VENV_PYTHON="$BASE_DIR/.venv/bin/python3"
+
+if [ -f "$INJECT_SCRIPT" ] && [ -f "$VENV_PYTHON" ]; then
+    # 17. BALANCE_TRANSFER_10 - 10 transfers during measurement
+    echo "[17/19] balance_transfer_10tx..."
+    (
+        $VENV_PYTHON "$INJECT_SCRIPT" --count 10 --delay 0.5 --url "ws://127.0.0.1:9944" 2>&1
+    ) &
+    BG_PID=$!
+    measure "balance_transfer_10tx" $SAMPLES
+    kill $BG_PID 2>/dev/null; wait $BG_PID 2>/dev/null
+
+    # 18. BALANCE_TRANSFER_50 - 50 transfers during measurement
+    echo "[18/19] balance_transfer_50tx..."
+    (
+        $VENV_PYTHON "$INJECT_SCRIPT" --count 50 --delay 0.1 --url "ws://127.0.0.1:9944" 2>&1
+    ) &
+    BG_PID=$!
+    measure "balance_transfer_50tx" $SAMPLES
+    kill $BG_PID 2>/dev/null; wait $BG_PID 2>/dev/null
+
+    # 19. BALANCE_TRANSFER_100 - 100 transfers during measurement
+    echo "[19/19] balance_transfer_100tx..."
+    (
+        $VENV_PYTHON "$INJECT_SCRIPT" --count 100 --delay 0.05 --url "ws://127.0.0.1:9944" 2>&1
+    ) &
+    BG_PID=$!
+    measure "balance_transfer_100tx" $SAMPLES
+    kill $BG_PID 2>/dev/null; wait $BG_PID 2>/dev/null
+else
+    echo "[17-19/19] Skipping balance transfer tests (inject script or venv not found)"
+fi
+
 echo ""
 echo "=== Data Collection Complete ==="
 
 # Summary
-echo "Summary (avg power in Watts):"
-printf "%-25s %10s %10s\n" "Function" "Package" "Core"
-printf "%-25s %10s %10s\n" "--------" "-------" "----"
+echo "Summary (avg power in Watts, unique blocks, total extrinsics):"
+printf "%-25s %10s %10s %8s %10s\n" "Function" "Package" "Core" "Blocks" "Extrinsics"
+printf "%-25s %10s %10s %8s %10s\n" "--------" "-------" "----" "------" "----------"
 for f in "$DATA_DIR"/*.csv; do
     name=$(basename "$f" .csv)
-    pkg_avg=$(awk -F',' 'NR>1 {sum+=$9; n++} END {printf "%.1f", sum/n/1000}' "$f")
-    core_avg=$(awk -F',' 'NR>1 {sum+=$10; n++} END {printf "%.2f", sum/n/1000}' "$f")
-    printf "%-25s %10s %10s\n" "$name" "${pkg_avg}W" "${core_avg}W"
+    pkg_avg=$(awk -F',' 'NR>1 {sum+=$10; n++} END {printf "%.1f", sum/n/1000}' "$f")
+    core_avg=$(awk -F',' 'NR>1 {sum+=$11; n++} END {printf "%.2f", sum/n/1000}' "$f")
+    # Count unique blocks and sum extrinsics per unique block (not duplicates)
+    ext_info=$(awk -F',' 'NR>1 {blocks[$3]=$5} END {total=0; for(b in blocks) total+=blocks[b]; printf "%d %d", length(blocks), total}' "$f")
+    num_blocks=$(echo "$ext_info" | cut -d' ' -f1)
+    ext_total=$(echo "$ext_info" | cut -d' ' -f2)
+    printf "%-25s %10s %10s %8s %10s\n" "$name" "${pkg_avg}W" "${core_avg}W" "$num_blocks" "$ext_total"
 done
 
 # Generate graphs

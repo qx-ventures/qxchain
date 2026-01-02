@@ -36,6 +36,7 @@ print(f'Graphs directory: {graphs_dir}')
 all_functions = [
     # Baseline
     'idle_chain_paused',
+    'idle_baseline',
     'idle_consensus_running',
     # Consensus
     'block_production_aura',
@@ -59,6 +60,10 @@ all_functions = [
     'runtime_api_calls',
     # Mixed
     'mixed_workload',
+    # Balance Transfer Tests (with actual transactions)
+    'balance_transfer_10tx',
+    'balance_transfer_50tx',
+    'balance_transfer_100tx',
     # Legacy names (for backwards compatibility)
     'balance_transfer',
     'state_read',
@@ -168,15 +173,16 @@ print(f'Saved: {graphs_dir}/combined_power_timeline.png')
 # Bar chart - grouped by category
 summary = []
 categories = {
-    'Baseline': ['idle_chain_paused', 'idle_consensus_running'],
+    'Baseline': ['idle_chain_paused', 'idle_baseline', 'idle_consensus_running'],
     'Consensus': ['block_production_aura', 'finalization_grandpa'],
-    'Tx Pool': ['tx_pool_pending', 'balance_transfer'],
+    'Tx Pool': ['tx_pool_pending'],
     'Account': ['account_info_query', 'balance_query'],
     'State': ['state_read_simple', 'state_read_keys', 'state_runtime_version', 'state_read'],
     'Chain': ['chain_get_block', 'chain_get_header'],
     'RPC': ['rpc_metadata_fetch', 'rpc_system_info', 'rpc_light_calls'],
     'Runtime': ['runtime_api_calls'],
     'Mixed': ['mixed_workload'],
+    'Transfers': ['balance_transfer_10tx', 'balance_transfer_50tx', 'balance_transfer_100tx', 'balance_transfer'],
 }
 
 for func in functions:
