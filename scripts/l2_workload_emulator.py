@@ -314,6 +314,19 @@ def create_workload_scenarios() -> Dict[str, WorkloadConfig]:
         ]
     )
 
+    # Balanced research workload - equal weight on complex/ensemble types
+    # Weights: Fast 40%, Standard 20%, Complex 20%, Ensemble 20%
+    scenarios['balanced_research'] = WorkloadConfig(
+        arrival_rate_lambda=15.0,
+        duration_seconds=60.0,
+        experts=[
+            ExpertConfig(0, "Fast-Inference", 0.40, 5.0, 0.5, 50, 256),
+            ExpertConfig(1, "Standard-Inference", 0.20, 6.0, 0.6, 128, 1024),
+            ExpertConfig(2, "Complex-Inference", 0.20, 6.8, 0.7, 512, 2048),
+            ExpertConfig(3, "Ensemble-Inference", 0.20, 7.2, 0.4, 1024, 2048),
+        ]
+    )
+
     return scenarios
 
 

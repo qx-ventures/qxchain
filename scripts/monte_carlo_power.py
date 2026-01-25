@@ -345,6 +345,12 @@ class MonteCarloSimulator:
         # Create output directory
         Path(config.output_dir).mkdir(parents=True, exist_ok=True)
 
+        # Setup incremental CSV file
+        self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.csv_file = Path(config.output_dir) / f'mc_results_{self.timestamp}.csv'
+        self.csv_writer = None
+        self.csv_handle = None
+
     def sample_parameters(self) -> WorkloadConfig:
         """Sample workload parameters for this simulation run"""
         config = WorkloadConfig(
@@ -520,6 +526,7 @@ class MonteCarloSimulator:
         print(f"Scenario: {self.config.workload_scenario}")
         print(f"TX per run: {self.config.tx_per_run}")
         print(f"Mode: {'Balance transfers' if self.config.tx_only_mode else 'AI workload emulation'}")
+        print(f"Output: {self.csv_file}")
         print()
 
         # Kill any existing chain processes
@@ -527,15 +534,43 @@ class MonteCarloSimulator:
         subprocess.run(["pkill", "-9", "qxchain"], capture_output=True)
         time.sleep(1)
 
-        for sim_id in range(1, self.config.n_simulations + 1):
-            print(f"\n{'='*50}")
-            print(f"Simulation {sim_id}/{self.config.n_simulations}")
-            print('='*50)
+        # Start chain once if not restarting between runs
+        if not self.config.restart_chain:
+            print("Starting chain (will keep running for all simulations)...")
+            reset_chain_state()
+            if not start_chain():
+                print("Error: Failed to start chain")
+                return []
 
-            result = self.run_single_simulation(sim_id)
-            if result:
-                self.results.append(result)
-                print(f"  Energy: {result.energy_j:.1f}J | J/tx: {result.j_per_tx:.4f} | TPS: {result.tx_per_second:.1f}")
+        # Open CSV file for incremental writing
+        self.csv_handle = open(self.csv_file, 'w', newline='')
+        fieldnames = [
+            'simulation_id', 'timestamp', 'arrival_rate', 'expert_weights',
+            'complexity_sigma', 'tx_count', 'tx_by_model', 'total_bytes',
+            'duration_s', 'energy_j', 'power_w', 'j_per_tx', 'tx_per_second',
+            'blocks_used', 'start_block', 'end_block'
+        ]
+        self.csv_writer = csv.DictWriter(self.csv_handle, fieldnames=fieldnames)
+        self.csv_writer.writeheader()
+        self.csv_handle.flush()
+
+        try:
+            for sim_id in range(1, self.config.n_simulations + 1):
+                print(f"\n{'='*50}")
+                print(f"Simulation {sim_id}/{self.config.n_simulations}")
+                print('='*50)
+
+                result = self.run_single_simulation(sim_id)
+                if result:
+                    self.results.append(result)
+                    # Write immediately to CSV
+                    self.csv_writer.writerow(result.to_dict())
+                    self.csv_handle.flush()
+                    print(f"  Energy: {result.energy_j:.1f}J | J/tx: {result.j_per_tx:.4f} | TPS: {result.tx_per_second:.1f}")
+        finally:
+            # Always close the CSV file
+            if self.csv_handle:
+                self.csv_handle.close()
 
         # Stop chain at the end
         stop_chain()
@@ -588,19 +623,7 @@ class MonteCarloSimulator:
         }
 
     def save_results(self) -> Tuple[str, str]:
-        """Save results to CSV and summary to JSON"""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-        # Save individual results to CSV
-        csv_file = Path(self.config.output_dir) / f'mc_results_{timestamp}.csv'
-        if self.results:
-            fieldnames = list(self.results[0].to_dict().keys())
-            with open(csv_file, 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                for r in self.results:
-                    writer.writerow(r.to_dict())
-
+        """Save summary to JSON (CSV is written incrementally during simulation)"""
         # Save summary statistics to JSON
         summary = self.compute_statistics()
         summary['config'] = {
@@ -615,13 +638,13 @@ class MonteCarloSimulator:
                 'complexity': self.config.vary_complexity,
             }
         }
-        summary['timestamp'] = timestamp
+        summary['timestamp'] = self.timestamp
 
-        json_file = Path(self.config.output_dir) / f'mc_summary_{timestamp}.json'
+        json_file = Path(self.config.output_dir) / f'mc_summary_{self.timestamp}.json'
         with open(json_file, 'w') as f:
             json.dump(summary, f, indent=2)
 
-        return str(csv_file), str(json_file)
+        return str(self.csv_file), str(json_file)
 
 
 def main():
@@ -631,7 +654,7 @@ def main():
     parser.add_argument('--simulations', '-n', type=int, default=100,
                         help='Number of Monte Carlo simulations')
     parser.add_argument('--scenario', type=str, default='medium',
-                        choices=['light', 'medium', 'heavy', 'burst'],
+                        choices=['light', 'medium', 'heavy', 'burst', 'balanced_research'],
                         help='Workload scenario')
     parser.add_argument('--tx', type=int, default=100,
                         help='Transactions per simulation run')
@@ -647,6 +670,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Create scenario-specific output directory
+    output_dir = f"{args.output}/{args.scenario}"
+
     config = MonteCarloConfig(
         n_simulations=args.simulations,
         workload_scenario=args.scenario,
@@ -654,7 +680,7 @@ def main():
         tx_only_mode=args.tx_only,
         restart_chain=not args.no_restart,
         seed=args.seed,
-        output_dir=args.output,
+        output_dir=output_dir,
     )
 
     simulator = MonteCarloSimulator(config)
