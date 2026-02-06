@@ -2,6 +2,10 @@
 //!
 //! This pallet allows new users to claim tokens for free to get started
 //! with the QX Chain. Rate-limited and capped per account.
+//!
+//! Claims are submitted as UNSIGNED transactions so that accounts with
+//! zero balance can use the faucet without paying any gas fees.
+//! Spam protection is enforced via `validate_unsigned` (cooldown + max claims).
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -85,19 +89,22 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Claim tokens from the faucet
+		/// Claim tokens from the faucet (unsigned transaction).
 		///
-		/// This is a FREE transaction (Pays::No) so users don't need
-		/// existing balance to claim their first tokens.
+		/// This is submitted as an UNSIGNED transaction so accounts with zero
+		/// balance can claim their first tokens without paying gas.
+		/// Spam protection is handled by `validate_unsigned` (cooldown + max claims).
+		///
+		/// The `account` parameter specifies which account receives the tokens.
 		#[pallet::call_index(0)]
 		#[pallet::weight((Weight::from_parts(50_000, 0), DispatchClass::Normal, Pays::No))]
-		pub fn claim(origin: OriginFor<T>) -> DispatchResult {
-			let who = ensure_signed(origin)?;
+		pub fn claim(origin: OriginFor<T>, account: T::AccountId) -> DispatchResult {
+			ensure_none(origin)?;
 
 			let current_block = frame_system::Pallet::<T>::block_number();
 
 			// Check cooldown
-			if let Some(last) = LastClaim::<T>::get(&who) {
+			if let Some(last) = LastClaim::<T>::get(&account) {
 				let cooldown = T::ClaimCooldown::get();
 				ensure!(
 					current_block >= last.saturating_add(cooldown),
@@ -106,7 +113,7 @@ pub mod pallet {
 			}
 
 			// Check max claims
-			let claims = ClaimCount::<T>::get(&who);
+			let claims = ClaimCount::<T>::get(&account);
 			ensure!(claims < T::MaxClaimsPerAccount::get(), Error::<T>::MaxClaimsReached);
 
 			let drip_amount = T::DripAmount::get();
@@ -119,16 +126,16 @@ pub mod pallet {
 			// Transfer from faucet pot to claimer
 			T::Currency::transfer(
 				&faucet_pot,
-				&who,
+				&account,
 				drip_amount,
 				ExistenceRequirement::KeepAlive,
 			)?;
 
 			// Update state
-			LastClaim::<T>::insert(&who, current_block);
-			ClaimCount::<T>::mutate(&who, |c| *c = c.saturating_add(1));
+			LastClaim::<T>::insert(&account, current_block);
+			ClaimCount::<T>::mutate(&account, |c| *c = c.saturating_add(1));
 
-			Self::deposit_event(Event::Claimed { who, amount: drip_amount });
+			Self::deposit_event(Event::Claimed { who: account, amount: drip_amount });
 
 			Ok(())
 		}
@@ -150,6 +157,47 @@ pub mod pallet {
 			Self::deposit_event(Event::FaucetFunded { funder: who, amount });
 
 			Ok(())
+		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			match call {
+				Call::claim { account } => {
+					// Check cooldown
+					if let Some(last) = LastClaim::<T>::get(account) {
+						let current_block = frame_system::Pallet::<T>::block_number();
+						let cooldown = T::ClaimCooldown::get();
+						if current_block < last.saturating_add(cooldown) {
+							return InvalidTransaction::Stale.into();
+						}
+					}
+
+					// Check max claims
+					let claims = ClaimCount::<T>::get(account);
+					if claims >= T::MaxClaimsPerAccount::get() {
+						return InvalidTransaction::ExhaustsResources.into();
+					}
+
+					// Check faucet has funds
+					let drip_amount = T::DripAmount::get();
+					let faucet_balance = T::Currency::free_balance(&T::FaucetPot::get());
+					if faucet_balance < drip_amount {
+						return InvalidTransaction::ExhaustsResources.into();
+					}
+
+					ValidTransaction::with_tag_prefix("QxFaucet")
+						.priority(1)
+						.and_provides(account)
+						.longevity(3)
+						.propagate(true)
+						.build()
+				}
+				_ => InvalidTransaction::Call.into(),
+			}
 		}
 	}
 

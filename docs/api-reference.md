@@ -34,7 +34,7 @@ QX Chain is a Substrate-based blockchain designed for permissioned AI execution 
 | Property | Value |
 |----------|-------|
 | Spec Name | `qxchain` |
-| Spec Version | `102` |
+| Spec Version | `103` |
 | Block Time | 6 seconds |
 | SS58 Prefix | 42 |
 | Existential Deposit | 500 units |

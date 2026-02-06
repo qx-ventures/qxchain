@@ -21,7 +21,7 @@ pub struct InferenceRequest<AccountId> {
     pub customer: AccountId,
     pub target_worker: AccountId,
     pub prompt: BoundedVec<u8, ConstU32<2048>>,
-    pub model_id: u32,
+    pub max_tokens: u32,
     pub status: RequestStatus,
     pub created_at: u32,
 }
@@ -32,9 +32,8 @@ pub struct InferenceRequest<AccountId> {
 pub struct InferenceResult<AccountId> {
     pub request_id: u32,
     pub worker: AccountId,
-    pub worker_did: DidIdentifier,  // KILT DID for worker
+    pub worker_did: DidIdentifier,
     pub output: BoundedVec<u8, ConstU32<4096>>,
-    pub model_id: u32,
     pub status: InferenceStatus,
     pub submitted_at: u32,
 }
@@ -55,10 +54,10 @@ pub struct InferenceResult<AccountId> {
 
 #### AIWorker Functions
 - `update_ai_worker_status(online)`: Update AIWorker availability status
-- `submit_inference(request_id, output, model_id)`: Submit inference result directly (no proof required)
+- `submit_inference(request_id, output)`: Submit inference result directly
 
 #### Customer Functions
-- `submit_request(target_worker, prompt, model_id, max_tokens)`: Submit inference request to specific authorized AIWorker
+- `submit_request(target_worker, prompt, max_tokens)`: Submit inference request to specific authorized AIWorker
 
 #### Governance Functions (via pallet-qx-kilt-permissions)
 - Worker authorization managed through KILT credentials
@@ -117,6 +116,27 @@ The KILT Permissions pallet manages decentralized identity and credential verifi
 - `AuthorizedWorkers`: Map of DIDs to worker accounts
 - `WorkerCredentials`: Map of DIDs to credential status
 - `AccountToDID`: Reverse mapping from accounts to DIDs
+
+## 🚰 QX Faucet Pallet (`pallet-qx-faucet`)
+
+The Faucet pallet allows new users to claim free tokens for onboarding.
+
+### Key Features
+
+- **Unsigned Transactions**: Claims are submitted as unsigned transactions so zero-balance accounts can use the faucet without paying gas
+- **Rate Limiting**: Cooldown period between claims (configurable, default 24 hours)
+- **Per-Account Cap**: Maximum number of claims per account (default 5)
+- **Drip Amount**: 10 QX tokens per claim
+
+### Extrinsics
+
+- `claim(account)`: Claim tokens from the faucet (unsigned, no gas required)
+- `fund_faucet(amount)`: Add funds to the faucet pot (signed)
+
+### Storage Items
+
+- `LastClaim`: Last claim block per account
+- `ClaimCount`: Number of claims per account
 
 ## 🔗 Framework Information
 
