@@ -9,3 +9,6 @@ data
 
 # Validator keys - NEVER commit these!
 scripts/node_keys/
+power_results/runs/
+# Ignore Python bytecode caches everywhere
+__pycache__/

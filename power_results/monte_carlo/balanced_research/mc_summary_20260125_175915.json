@@ -1,0 +1,43 @@
+{
+  "n_simulations": 1000,
+  "j_per_tx": {
+    "mean": 0.2568439694054087,
+    "std": 28.409637776293106,
+    "min": -656.9547062258065,
+    "max": 2.1324477605633803,
+    "ci_95_lower": -1.506989309224241,
+    "ci_95_upper": 2.0206772480350583
+  },
+  "power_w": {
+    "mean": 3.357192775317331,
+    "std": 461.7933426416264,
+    "ci_95_lower": -25.31358690919594,
+    "ci_95_upper": 32.0279724598306
+  },
+  "tps": {
+    "mean": 15.800898573841852,
+    "std": 1.0209860869969611,
+    "ci_95_lower": 15.737509900904746,
+    "ci_95_upper": 15.864287246778959
+  },
+  "energy_j": {
+    "mean": 23.856387226,
+    "std": 2736.067036937807
+  },
+  "config": {
+    "n_simulations": 1000,
+    "workload_scenario": "balanced_research",
+    "tx_per_run": 100,
+    "tx_only_mode": false,
+    "arrival_rate_range": [
+      5.0,
+      30.0
+    ],
+    "vary_parameters": {
+      "arrival_rate": true,
+      "expert_weights": true,
+      "complexity": true
+    }
+  },
+  "timestamp": "20260125_175915"
+}
