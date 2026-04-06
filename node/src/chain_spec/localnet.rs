@@ -77,6 +77,11 @@ fn localnet_genesis(
             get_account_id_from_seed::<sr25519::Public>("Ferdie"),
             2_000_000_000_000u128,
         ),
+        // Faucet pot - 1 million QX for user onboarding
+        (
+            faucet_pot_account(),
+            1_000_000_000_000_000_000u128, // 1 million QX tokens
+        ),
     ];
 
     serde_json::json!({

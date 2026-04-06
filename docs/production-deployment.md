@@ -8,7 +8,7 @@ This guide walks through deploying QXChain **consensus validators** in productio
 
 - Linux server (AMD64 architecture)
 - Docker installed
-- Azure account (if using Azure Container Apps)
+- Container registry account (OVH, Docker Hub, etc.)
 - Basic understanding of blockchain consensus validators
 
 ## Step 1: Generate Validator Keys
@@ -87,17 +87,17 @@ This takes ~15 minutes and produces an optimized production binary.
 
 ## Step 5: Push to Container Registry
 
-### Azure Container Registry (ACR)
+Push to any Docker-compatible container registry (Docker Hub, GHCR, OVH, etc.):
 
 ```bash
-# Tag for ACR
-docker tag qxchain:production qxchain.azurecr.io/qxchain:production
+# Tag for your registry
+docker tag qxchain:production <your-registry>/qxchain:production
 
-# Login to ACR
-az acr login --name qxchain
+# Login to your registry
+docker login <your-registry>
 
 # Push image
-docker push qxchain.azurecr.io/qxchain:production
+docker push <your-registry>/qxchain:production
 ```
 
 ## Step 6: Deploy Validator Node
@@ -127,26 +127,7 @@ docker run -d \
 
 Insert keys manually via RPC after the validator is running:
 
-### Azure Container Apps
-
-```bash
-# Connect to container
-az containerapp exec \
-  --name qxchain-validator-01 \
-  --resource-group <your-resource-group> \
-  --command /bin/bash
-
-# Insert Aura key (inside container)
-curl -H "Content-Type: application/json" -d '{"id":1,"jsonrpc":"2.0","method":"author_insertKey","params":["aura","<YOUR_AURA_PHRASE>","<YOUR_AURA_PUBLIC>"]}' http://127.0.0.1:9944
-
-# Insert Grandpa key (inside container)
-curl -H "Content-Type: application/json" -d '{"id":1,"jsonrpc":"2.0","method":"author_insertKey","params":["gran","<YOUR_GRANDPA_PHRASE>","<YOUR_GRANDPA_PUBLIC>"]}' http://127.0.0.1:9944
-
-# Exit container
-exit
-```
-
-### Docker (Self-Hosted)
+### Docker (Self-Hosted / OVH Cloud)
 
 ```bash
 # Insert Aura key
@@ -199,4 +180,6 @@ After confirming the validator is working:
 
 ## Troubleshooting
 
-See [troubleshooting.md](troubleshooting.md) for common issues and solutions.
+- Ensure keys are inserted after each container restart (or use environment variables `AURA_PHRASE`, `AURA_PUBLIC`, `GRANDPA_PHRASE`, `GRANDPA_PUBLIC` which the entrypoint script handles automatically)
+- Check validator logs: `docker logs qxchain-validator-01`
+- Verify peer connections: `curl -s -H "Content-Type: application/json" -d '{"id":1,"jsonrpc":"2.0","method":"system_health","params":[]}' http://127.0.0.1:9944`
